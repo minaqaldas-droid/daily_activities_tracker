@@ -16,7 +16,11 @@ import {
 } from './supabaseClient'
 
 function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    // Check localStorage on initial load
+    const saved = localStorage.getItem('currentUser')
+    return saved ? JSON.parse(saved) : null
+  })
   const [activities, setActivities] = useState<Activity[]>([])
   const [filteredActivities, setFilteredActivities] = useState<Activity[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -29,6 +33,8 @@ function App() {
 
   useEffect(() => {
     if (currentUser) {
+      // Persist user to localStorage
+      localStorage.setItem('currentUser', JSON.stringify(currentUser))
       loadActivities()
     }
   }, [currentUser])
@@ -73,6 +79,7 @@ function App() {
         }
         await updateActivity(editingId, updateData)
         setMessage({ type: 'success', text: 'Activity updated successfully!' })
+        // Clear editing state first
         setEditingId(null)
         setEditingData(undefined)
       } else {
@@ -145,6 +152,8 @@ function App() {
   }
 
   const handleLogout = () => {
+    // Clear user from localStorage
+    localStorage.removeItem('currentUser')
     setCurrentUser(null)
     setActivities([])
     setFilteredActivities([])

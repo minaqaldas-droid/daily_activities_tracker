@@ -63,17 +63,16 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     await onSubmit(formData)
-    if (!initialData) {
-      setFormData({
-        date: new Date().toISOString().split('T')[0],
-        performer: '',
-        system: '',
-        instrument: '',
-        problem: '',
-        action: '',
-        comments: '',
-      })
-    }
+    // Always reset form after submit
+    setFormData({
+      date: new Date().toISOString().split('T')[0],
+      performer: '',
+      system: '',
+      instrument: '',
+      problem: '',
+      action: '',
+      comments: '',
+    })
   }
 
   return (
