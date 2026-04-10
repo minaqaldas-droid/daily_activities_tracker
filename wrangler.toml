@@ -1,0 +1,22 @@
+# Cloudflare Pages Configuration
+# For local development and preview
+
+name = "daily-activities-tracker"
+type = "javascript"
+compatibility_date = "2024-04-10"
+
+# Build configuration
+[build]
+command = "npm run build"
+cwd = "."
+watch_paths = ["src/**/*.tsx", "src/**/*.ts"]
+
+# Output configuration  
+[env.production]
+name = "daily-activities-tracker-prod"
+routes = [
+  { pattern = "your-domain.com/*", zone_id = "your-zone-id" }
+]
+
+[env.preview]
+name = "daily-activities-tracker-preview"

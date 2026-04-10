@@ -33,22 +33,28 @@ Update the `wrangler.toml` file with your Cloudflare details:
 3. Click **Create application** > **Connect to Git**
 4. Select your GitHub repository
 5. Configure build settings:
+   - **Framework preset**: `Vite` (or None)
    - **Production branch**: `main` (or your main branch)
    - **Build command**: `npm run build`
    - **Build output directory**: `dist`
-6. Add Environment Variables:
+6. **IMPORTANT - Deploy settings**:
+   - Leave **Deploy command** EMPTY (don't set any custom deploy command)
+7. Add Environment Variables:
    - `VITE_SUPABASE_URL`: Your Supabase project URL
    - `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
-7. Click **Save and Deploy**
+8. Click **Save and Deploy**
 
-#### Option B: Wrangler CLI
+#### Option B: Using Wrangler Pages CLI
 
 ```bash
-# Login to Cloudflare
-wrangler login
+# Build locally
+npm run build
 
-# Deploy
-wrangler pages deploy dist
+# Login to Cloudflare (first time only)
+npx wrangler login
+
+# Deploy to Pages
+npx wrangler pages deploy dist
 ```
 
 ## Configuration Files
