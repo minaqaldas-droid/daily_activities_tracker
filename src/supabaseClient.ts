@@ -23,7 +23,17 @@ export interface User {
   email: string
   name: string
   password?: string
+  role?: 'user' | 'superadmin'
   created_at?: string
+}
+
+export interface Settings {
+  id?: string
+  webapp_name: string
+  logo_url: string
+  primary_color?: string
+  updated_at?: string
+  updated_by?: string
 }
 
 export interface AuthSession {
@@ -168,6 +178,89 @@ export async function updateUserDetails(userId: string, name: string, email: str
     return data?.[0]
   } catch (error) {
     console.error('Error updating user:', error)
+    throw error
+  }
+}
+
+// Settings functions (Superadmin only)
+export async function getSettings() {
+  try {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('*')
+      .limit(1)
+
+    if (error) throw error
+    
+    // Return first settings record or default
+    if (data && data.length > 0) {
+      return data[0]
+    }
+    
+    // Return default settings if no record exists
+    return {
+      webapp_name: 'Daily Activities Tracker',
+      logo_url: '',
+      primary_color: '#667eea'
+    }
+  } catch (error) {
+    console.error('Error fetching settings:', error)
+    throw error
+  }
+}
+
+export async function updateSettings(settings: Partial<Settings>, userId: string) {
+  try {
+    // First, check if settings exist
+    const { data: existing } = await supabase
+      .from('settings')
+      .select('id')
+      .limit(1)
+
+    if (existing && existing.length > 0) {
+      // Update existing
+      const { data, error } = await supabase
+        .from('settings')
+        .update({
+          ...settings,
+          updated_at: new Date().toISOString(),
+          updated_by: userId
+        })
+        .eq('id', existing[0].id)
+        .select()
+
+      if (error) throw error
+      return data?.[0]
+    } else {
+      // Insert new
+      const { data, error } = await supabase
+        .from('settings')
+        .insert([{
+          ...settings,
+          updated_by: userId
+        }])
+        .select()
+
+      if (error) throw error
+      return data?.[0]
+    }
+  } catch (error) {
+    console.error('Error updating settings:', error)
+    throw error
+  }
+}
+
+export async function getSuperadminUsers() {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .eq('role', 'superadmin')
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error fetching superadmin users:', error)
     throw error
   }
 }

@@ -4,15 +4,18 @@ import { ActivityList } from './components/ActivityList'
 import { Login } from './components/Login'
 import { Dashboard } from './components/Dashboard'
 import { AccountSettings } from './components/AccountSettings'
+import { SuperAdminPanel } from './components/SuperAdminPanel'
 import { SearchFilter } from './components/SearchFilter'
 import {
   Activity,
   User,
+  Settings,
   getActivities,
   createActivity,
   updateActivity,
   deleteActivity,
   searchActivities,
+  getSettings,
 } from './supabaseClient'
 
 function App() {
@@ -29,15 +32,31 @@ function App() {
   const [editingData, setEditingData] = useState<Activity | undefined>(undefined)
   const [currentView, setCurrentView] = useState<'dashboard' | 'add' | 'search'>('dashboard')
   const [showAccountSettings, setShowAccountSettings] = useState(false)
+  const [showSuperAdminPanel, setShowSuperAdminPanel] = useState(false)
   const [searchApplied, setSearchApplied] = useState(false)
+  const [settings, setSettings] = useState<Settings>({
+    webapp_name: 'Daily Activities Tracker',
+    logo_url: '',
+    primary_color: '#667eea',
+  })
 
   useEffect(() => {
     if (currentUser) {
       // Persist user to localStorage
       localStorage.setItem('currentUser', JSON.stringify(currentUser))
       loadActivities()
+      loadSettings()
     }
   }, [currentUser])
+
+  const loadSettings = async () => {
+    try {
+      const appSettings = await getSettings()
+      setSettings(appSettings)
+    } catch (error) {
+      console.error('Error loading settings:', error)
+    }
+  }
 
   useEffect(() => {
     // Update filtered activities when activities change
@@ -173,13 +192,26 @@ function App() {
     <div className="container">
       <div className="header">
         <div className="header-content">
-          <div>
-            <h1>📋 Daily Activities Tracker</h1>
-            <p>Track your daily work activities with problems, actions, and comments</p>
+          <div className="header-logo-section">
+            {settings.logo_url && (
+              <img src={settings.logo_url} alt="App Logo" className="app-logo" onError={() => {}} />
+            )}
+            <div>
+              <h1>{settings.webapp_name}</h1>
+              <p>Track your daily work activities with problems, actions, and comments</p>
+            </div>
           </div>
           <div className="header-user">
             <p>Welcome, <strong>{currentUser.name}</strong></p>
+            {currentUser.role === 'superadmin' && (
+              <span className="system-badge">🔐 SUPERADMIN</span>
+            )}
             <div className="header-buttons">
+              {currentUser.role === 'superadmin' && (
+                <button className="btn btn-secondary" onClick={() => setShowSuperAdminPanel(true)}>
+                  🔧 Admin Settings
+                </button>
+              )}
               <button className="btn btn-secondary" onClick={() => setShowAccountSettings(true)}>
                 ⚙️ Settings
               </button>
@@ -203,6 +235,19 @@ function App() {
           user={currentUser}
           onUpdateSuccess={handleUpdateUser}
           onClose={() => setShowAccountSettings(false)}
+          isLoading={isLoading}
+        />
+      )}
+
+      {/* Superadmin Settings Modal */}
+      {showSuperAdminPanel && currentUser.role === 'superadmin' && (
+        <SuperAdminPanel
+          user={currentUser}
+          onClose={() => setShowSuperAdminPanel(false)}
+          onSettingsUpdate={(newSettings) => {
+            setSettings(newSettings)
+            setMessage({ type: 'success', text: 'Settings updated successfully!' })
+          }}
           isLoading={isLoading}
         />
       )}
