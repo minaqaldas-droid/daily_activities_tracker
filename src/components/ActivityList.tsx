@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Activity } from '../supabaseClient'
 
 interface ActivityListProps {
@@ -14,10 +14,17 @@ export const ActivityList: React.FC<ActivityListProps> = ({
   onDelete,
   isLoading = false,
 }) => {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this activity?')) {
       await onDelete(id)
     }
+  }
+
+  const toggleExpand = (id: string | undefined) => {
+    if (!id) return
+    setExpandedId(expandedId === id ? null : id)
   }
 
   if (activities.length === 0) {
@@ -29,66 +36,91 @@ export const ActivityList: React.FC<ActivityListProps> = ({
   }
 
   return (
-    <div className="activities-grid">
-      {activities.map((activity) => (
-        <div key={activity.id} className="activity-card">
-          <h3>📅 {activity.date}</h3>
-          
-          <div className="activity-detail">
-            <strong>Performer:</strong> {activity.performer}
-          </div>
-
-          <div className="activity-detail">
-            <strong>System:</strong>
-            <span className="system-badge">{activity.system}</span>
-          </div>
-
-          <div className="activity-detail">
-            <strong>Instrument/Tag:</strong> 
-            <span className="instrument-tag">{activity.instrument}</span>
-          </div>
-
-          <div className="activity-detail">
-            <strong>Problem:</strong>
-            <p>{activity.problem}</p>
-          </div>
-
-          <div className="activity-detail">
-            <strong>Action:</strong>
-            <p>{activity.action}</p>
-          </div>
-
-          {activity.comments && (
-            <div className="activity-detail">
-              <strong>Comments:</strong>
-              <p>{activity.comments}</p>
-            </div>
-          )}
-
-          {activity.editedBy && (
-            <div className="activity-detail edited-info">
-              <strong>✏️ Edited by:</strong> {activity.editedBy}
-            </div>
-          )}
-
-          <div className="activity-actions">
-            <button
-              className="btn btn-edit"
-              onClick={() => onEdit(activity)}
-              disabled={isLoading}
-            >
-              Edit
-            </button>
-            <button
-              className="btn btn-danger"
-              onClick={() => handleDelete(activity.id!)}
-              disabled={isLoading}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      ))}
+    <div className="table-container">
+      <table className="activities-table">
+        <thead>
+          <tr>
+            <th className="col-date">Date</th>
+            <th className="col-performer">Performer</th>
+            <th className="col-system">System</th>
+            <th className="col-instrument">Instrument/Tag</th>
+            <th className="col-problem">Problem</th>
+            <th className="col-action">Action</th>
+            <th className="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {activities.map((activity) => (
+            <React.Fragment key={activity.id}>
+              <tr
+                className={`activity-row ${expandedId === activity.id ? 'expanded' : ''}`}
+                onClick={() => activity.comments && toggleExpand(activity.id)}
+                style={{ cursor: activity.comments ? 'pointer' : 'default' }}
+              >
+                <td className="col-date">
+                  <span className="date-badge">{activity.date}</span>
+                </td>
+                <td className="col-performer">{activity.performer}</td>
+                <td className="col-system">
+                  <span className="system-badge">{activity.system}</span>
+                </td>
+                <td className="col-instrument">
+                  <span className="instrument-tag">{activity.instrument}</span>
+                </td>
+                <td className="col-problem">
+                  <div className="truncate">{activity.problem}</div>
+                </td>
+                <td className="col-action">
+                  <div className="truncate">{activity.action}</div>
+                </td>
+                <td className="col-actions">
+                  <button
+                    className="btn btn-edit btn-sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEdit(activity)
+                    }}
+                    disabled={isLoading}
+                    title="Edit activity"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDelete(activity.id!)
+                    }}
+                    disabled={isLoading}
+                    title="Delete activity"
+                  >
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+              {expandedId === activity.id && (
+                <tr className="expanded-row">
+                  <td colSpan={7}>
+                    <div className="expanded-content">
+                      {activity.comments && (
+                        <div className="expanded-section">
+                          <strong>📝 Comments:</strong>
+                          <p>{activity.comments}</p>
+                        </div>
+                      )}
+                      {activity.editedBy && (
+                        <div className="expanded-section">
+                          <strong>✏️ Edited by:</strong> {activity.editedBy}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

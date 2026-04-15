@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { Activity } from '../supabaseClient'
+import { ActivityList } from './ActivityList'
 
 interface DashboardProps {
   activities: Activity[]
   performerName: string
+  onEdit?: (activity: Activity) => void
+  onDelete?: (id: string) => Promise<void>
+  isLoading?: boolean
 }
 
 interface DashboardStats {
@@ -19,7 +23,13 @@ interface DashboardStats {
   thisWeekActivities: number
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ activities, performerName }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ 
+  activities, 
+  performerName, 
+  onEdit, 
+  onDelete, 
+  isLoading = false 
+}) => {
   const [stats, setStats] = useState<DashboardStats>({
     totalActivities: 0,
     myActivities: 0,
@@ -331,25 +341,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, performerName 
         </div>
       </div>
 
-      {/* Recent Activities */}
-      {stats.recentActivities.length > 0 && (
-        <div className="dashboard-section">
+      {/* Recent Activities - Modern Table */}
+      {stats.recentActivities.length > 0 && onEdit && onDelete && (
+        <div className="dashboard-section recent-activities-table">
           <h3>📋 Recent Activities</h3>
-          <div className="recent-list">
-            {stats.recentActivities.map((activity) => (
-              <div key={activity.id} className="recent-item">
-                <div className="recent-header">
-                  <span className="recent-date">{activity.date}</span>
-                  <span className="recent-performer">{activity.performer}</span>
-                </div>
-                <div className="recent-badges">
-                  <span className="system-badge">{activity.system}</span>
-                  <span className="recent-tag">{activity.instrument}</span>
-                </div>
-                <p className="recent-problem">{activity.problem.substring(0, 100)}...</p>
-              </div>
-            ))}
-          </div>
+          <ActivityList
+            activities={stats.recentActivities}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            isLoading={isLoading}
+          />
         </div>
       )}
     </div>

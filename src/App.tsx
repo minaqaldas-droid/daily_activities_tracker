@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard'
 import { AccountSettings } from './components/AccountSettings'
 import { SuperAdminPanel } from './components/SuperAdminPanel'
 import { SearchFilter } from './components/SearchFilter'
+import { Sidebar } from './components/Sidebar'
 import {
   Activity,
   User,
@@ -189,160 +190,138 @@ function App() {
   }
 
   return (
-    <div className="container">
-      <div className="header">
-        <div className="header-content">
-          <div className="header-logo-section">
-            {settings.logo_url && (
-              <img src={settings.logo_url} alt="App Logo" className="app-logo" onError={() => {}} />
-            )}
-            <div>
-              <h1>{settings.webapp_name}</h1>
-              <p>Track your daily work activities with problems, actions, and comments</p>
-            </div>
-          </div>
-          <div className="header-user">
-            <p>Welcome, <strong>{currentUser.name}</strong></p>
-            {currentUser.role === 'superadmin' && (
-              <span className="system-badge">🔐 SUPERADMIN</span>
-            )}
-            <div className="header-buttons">
-              {currentUser.role === 'superadmin' && (
-                <button className="btn btn-secondary" onClick={() => setShowSuperAdminPanel(true)}>
-                  🔧 Admin Settings
-                </button>
+    <div className="app-layout">
+      <Sidebar
+        currentUser={currentUser}
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        onSettingsClick={() => setShowAccountSettings(true)}
+        onAdminClick={() => setShowSuperAdminPanel(true)}
+        onLogout={handleLogout}
+      />
+
+      <div className="main-content">
+        <div className="header">
+          <div className="header-content">
+            <div className="header-logo-section">
+              {settings.logo_url && (
+                <img src={settings.logo_url} alt="App Logo" className="app-logo" onError={() => {}} />
               )}
-              <button className="btn btn-secondary" onClick={() => setShowAccountSettings(true)}>
-                ⚙️ Settings
-              </button>
-              <button className="btn btn-logout" onClick={handleLogout}>
-                Logout
-              </button>
+              <div>
+                <h1>{settings.webapp_name}</h1>
+                <p>Track your daily work activities with problems, actions, and comments</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {message && (
-        <div className={`${message.type === 'success' ? 'success-message' : 'error-message'}`}>
-          {message.text}
-        </div>
-      )}
-
-      {/* Account Settings Modal */}
-      {showAccountSettings && (
-        <AccountSettings
-          user={currentUser}
-          onUpdateSuccess={handleUpdateUser}
-          onClose={() => setShowAccountSettings(false)}
-          isLoading={isLoading}
-        />
-      )}
-
-      {/* Superadmin Settings Modal */}
-      {showSuperAdminPanel && currentUser.role === 'superadmin' && (
-        <SuperAdminPanel
-          user={currentUser}
-          onClose={() => setShowSuperAdminPanel(false)}
-          onSettingsUpdate={(newSettings) => {
-            setSettings(newSettings)
-            setMessage({ type: 'success', text: 'Settings updated successfully!' })
-          }}
-          isLoading={isLoading}
-        />
-      )}
-
-      {/* Navigation Tabs */}
-      <div className="navigation-tabs">
-        <button
-          className={`tab-button ${currentView === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setCurrentView('dashboard')}
-        >
-          📊 Dashboard
-        </button>
-        <button
-          className={`tab-button ${currentView === 'add' ? 'active' : ''}`}
-          onClick={() => setCurrentView('add')}
-        >
-          ➕ Add Activity
-        </button>
-        <button
-          className={`tab-button ${currentView === 'search' ? 'active' : ''}`}
-          onClick={() => setCurrentView('search')}
-        >
-          🔍 Search Activities
-        </button>
-      </div>
-
-      {/* Dashboard View */}
-      {currentView === 'dashboard' && (
-        <div className="dashboard-section-main">
-          <Dashboard activities={activities} performerName={currentUser.name} />
-        </div>
-      )}
-
-      {/* Add Activity View */}
-      {currentView === 'add' && (
-        <>
-          <div className="form-section">
-            <h2>
-              {editingId ? '✏️ Edit Activity' : '➕ Add New Activity'}
-            </h2>
-            <ActivityForm
-              onSubmit={handleAddOrUpdateActivity}
-              initialData={editingData}
-              isLoading={isLoading}
-            />
-            {editingId && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  setEditingId(null)
-                  setEditingData(undefined)
-                }}
-                style={{ marginTop: '10px' }}
-              >
-                Cancel Edit
-              </button>
-            )}
+        {message && (
+          <div className={`${message.type === 'success' ? 'success-message' : 'error-message'}`}>
+            {message.text}
           </div>
+        )}
 
-          <div className="list-section">
-            <h2>📝 Recent Activities</h2>
-            <ActivityList
-              activities={activities.slice(0, 10)}
-              onEdit={handleEditActivity}
-              onDelete={handleDeleteActivity}
-              isLoading={isLoading}
-            />
-          </div>
-        </>
-      )}
+        {/* Account Settings Modal */}
+        {showAccountSettings && (
+          <AccountSettings
+            user={currentUser}
+            onUpdateSuccess={handleUpdateUser}
+            onClose={() => setShowAccountSettings(false)}
+            isLoading={isLoading}
+          />
+        )}
 
-      {/* Search Activity View */}
-      {currentView === 'search' && (
-        <>
-          <div className="search-section">
-            <SearchFilter onSearch={handleSearch} isLoading={isLoading} />
-          </div>
+        {/* Superadmin Settings Modal */}
+        {showSuperAdminPanel && currentUser.role === 'superadmin' && (
+          <SuperAdminPanel
+            user={currentUser}
+            onClose={() => setShowSuperAdminPanel(false)}
+            onSettingsUpdate={(newSettings) => {
+              setSettings(newSettings)
+              setMessage({ type: 'success', text: 'Settings updated successfully!' })
+            }}
+            isLoading={isLoading}
+          />
+        )}
 
-          {searchApplied && (
-            <div className="search-info">
-              Found {filteredActivities.length} activity(ies)
+        <div className="content-wrapper">
+          {/* Dashboard View */}
+          {currentView === 'dashboard' && (
+            <div className="dashboard-section-main">
+              <Dashboard 
+                activities={activities} 
+                performerName={currentUser.name} 
+                onEdit={handleEditActivity}
+                onDelete={handleDeleteActivity}
+                isLoading={isLoading}
+              />
             </div>
           )}
 
-          <div className="list-section">
-            <h2>📝 Search Results ({filteredActivities.length})</h2>
-            <ActivityList
-              activities={filteredActivities}
-              onEdit={handleEditActivity}
-              onDelete={handleDeleteActivity}
-              isLoading={isLoading}
-            />
-          </div>
-        </>
-      )}
+          {/* Add Activity View */}
+          {currentView === 'add' && (
+            <>
+              <div className="form-section">
+                <h2>
+                  {editingId ? '✏️ Edit Activity' : '➕ Add New Activity'}
+                </h2>
+                <ActivityForm
+                  onSubmit={handleAddOrUpdateActivity}
+                  initialData={editingData}
+                  isLoading={isLoading}
+                />
+                {editingId && (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setEditingId(null)
+                      setEditingData(undefined)
+                    }}
+                    style={{ marginTop: '10px' }}
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+
+              <div className="list-section">
+                <h2>📝 Recent Activities</h2>
+                <ActivityList
+                  activities={activities.slice(0, 10)}
+                  onEdit={handleEditActivity}
+                  onDelete={handleDeleteActivity}
+                  isLoading={isLoading}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Search Activity View */}
+          {currentView === 'search' && (
+            <>
+              <div className="search-section">
+                <SearchFilter onSearch={handleSearch} isLoading={isLoading} />
+              </div>
+
+              {searchApplied && (
+                <div className="search-info">
+                  Found {filteredActivities.length} activity(ies)
+                </div>
+              )}
+
+              <div className="list-section">
+                <h2>📝 Search Results ({filteredActivities.length})</h2>
+                <ActivityList
+                  activities={filteredActivities}
+                  onEdit={handleEditActivity}
+                  onDelete={handleDeleteActivity}
+                  isLoading={isLoading}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
