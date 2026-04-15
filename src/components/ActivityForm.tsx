@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Activity } from '../supabaseClient'
+import { Activity, getUsers } from '../supabaseClient'
 
 const SYSTEMS = [
   'DCS',
@@ -47,10 +47,18 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     action: '',
     comments: '',
   })
+  const [usersList, setUsersList] = useState<Array<{ id: string; name: string; email: string }>>([])
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
+  const [performerIsOther, setPerformerIsOther] = useState(false)
 
   useEffect(() => {
     if (initialData) {
       setFormData(initialData)
+      // Check if performer is in the users list
+      const isUserInList = usersList.some((u) => u.name === initialData.performer)
+      if (!isUserInList && initialData.performer) {
+        setPerformerIsOther(true)
+      }
     } else if (performerMode === 'auto' && currentUserName && !formData.performer) {
       // Auto-fill performer name when in auto mode
       setFormData((prev) => ({
@@ -59,6 +67,25 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
       }))
     }
   }, [initialData, performerMode, currentUserName])
+
+  useEffect(() => {
+    // Load users list for manual mode dropdown
+    if (performerMode === 'manual') {
+      loadUsers()
+    }
+  }, [performerMode])
+
+  const loadUsers = async () => {
+    try {
+      setIsLoadingUsers(true)
+      const users = await getUsers()
+      setUsersList(users || [])
+    } catch (error) {
+      console.error('Failed to load users:', error)
+    } finally {
+      setIsLoadingUsers(false)
+    }
+  }
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -103,21 +130,75 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
       <div className="form-group">
         <label htmlFor="performer">Performer *</label>
-        <input
-          type="text"
-          id="performer"
-          name="performer"
-          value={formData.performer}
-          onChange={handleChange}
-          placeholder="Enter performer name"
-          required
-          disabled={performerMode === 'auto'}
-        />
-        <small className="form-hint">
-          {performerMode === 'auto'
-            ? '🔐 Auto-filled from your account'
-            : 'Your name will be auto-filled when logged in'}
-        </small>
+        {performerMode === 'manual' ? (
+          <>
+            <select
+              id="performer"
+              name="performer"
+              value={performerIsOther ? 'OTHER' : formData.performer}
+              onChange={(e) => {
+                if (e.target.value === 'OTHER') {
+                  setPerformerIsOther(true)
+                  setFormData((prev) => ({
+                    ...prev,
+                    performer: '',
+                  }))
+                } else {
+                  setPerformerIsOther(false)
+                  setFormData((prev) => ({
+                    ...prev,
+                    performer: e.target.value,
+                  }))
+                }
+              }}
+              required={!performerIsOther}
+              disabled={isLoadingUsers}
+            >
+              <option value="">-- Select Performer --</option>
+              {usersList.map((user) => (
+                <option key={user.id} value={user.name}>
+                  {user.name}
+                </option>
+              ))}
+              <option value="OTHER">Other</option>
+            </select>
+            <small className="form-hint">Select a user or choose "Other"</small>
+
+            {performerIsOther && (
+              <>
+                <input
+                  type="text"
+                  id="performer-other"
+                  name="performer-other"
+                  value={formData.performer}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      performer: e.target.value,
+                    }))
+                  }
+                  placeholder="Enter performer name"
+                  required
+                  style={{ marginTop: '10px' }}
+                />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              id="performer"
+              name="performer"
+              value={formData.performer}
+              onChange={handleChange}
+              disabled={performerMode === 'auto'}
+              placeholder="Enter performer name"
+              required
+            />
+            <small className="form-hint">🔐 Auto-filled from your account</small>
+          </>
+        )}
       </div>
 
       <div className="form-group">
@@ -184,6 +265,11 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
           onChange={handleChange}
           placeholder="Any additional comments (optional)"
         />
+        <small className="form-hint">
+          {performerIsOther && performerMode === 'manual' 
+            ? '💡 Please identify who the "Other" performer is in this section'
+            : 'Additional notes about this activity'}
+        </small>
       </div>
 
       <div className="form-actions">

@@ -118,10 +118,16 @@ function App() {
         setEditingId(null)
         setEditingData(undefined)
       } else {
-        // When adding, set performer to current user
+        // When adding, handle performer based on the mode
+        let performerName = activity.performer
+        if (settings.performer_mode === 'auto') {
+          // In auto mode, use logged-in user
+          performerName = currentUser?.name || activity.performer
+        }
+        // In manual mode, use the performer from the form
         const activityWithPerformer = {
           ...activity,
-          performer: currentUser?.name || activity.performer,
+          performer: performerName,
         }
         await createActivity(activityWithPerformer)
         setMessage({ type: 'success', text: 'Activity added successfully!' })
