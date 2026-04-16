@@ -428,8 +428,8 @@ body {
 }
 
 .app-logo {
-  max-width: 60px;
-  max-height: 60px;
+  max-width: 150px;
+  max-height: 150px;
   width: auto;
   height: auto;
   border-radius: 8px;
