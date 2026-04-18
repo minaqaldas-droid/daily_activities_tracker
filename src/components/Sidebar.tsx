@@ -105,15 +105,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.view}
               type="button"
-              className={`nav-item ${currentView === item.view ? 'active' : ''}`}
+              className={`nav-item ${currentView === item.view ? 'active' : ''} ${
+                item.view === 'import' && currentUser.role !== 'superadmin' ? 'restricted' : ''
+              }`}
               onClick={() => onViewChange(item.view)}
-              title={item.label}
-              aria-label={item.label}
+              title={
+                item.view === 'import' && currentUser.role !== 'superadmin'
+                  ? `${item.label} (Super Admin only)`
+                  : item.label
+              }
+              aria-label={
+                item.view === 'import' && currentUser.role !== 'superadmin'
+                  ? `${item.label} (Super Admin only)`
+                  : item.label
+              }
             >
               <span className="nav-icon" aria-hidden="true">
                 {item.icon}
               </span>
               <span className="nav-text">{item.label}</span>
+              {item.view === 'import' && currentUser.role !== 'superadmin' && (
+                <span className="nav-badge">Admin</span>
+              )}
             </button>
           ))}
         </div>

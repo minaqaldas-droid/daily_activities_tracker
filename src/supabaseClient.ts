@@ -303,16 +303,13 @@ export async function createActivity(activity: Activity) {
 export async function createActivities(activities: Activity[]) {
   try {
     if (activities.length === 0) {
-      return []
+      return 0
     }
 
-    const { data, error } = await supabase
-      .from('activities')
-      .insert(activities.map(getFormattedActivity))
-      .select('id')
+    const { error } = await supabase.from('activities').insert(activities.map(getFormattedActivity))
 
     if (error) throw error
-    return data || []
+    return activities.length
   } catch (error) {
     console.error('Error bulk creating activities:', error)
     throw error
@@ -603,10 +600,16 @@ export async function searchActivities(filters: SearchFilters) {
 
     let query = supabase.from('activities').select('*')
 
-    if (filters.startDate && filters.endDate) {
-      query = query.gte('date', filters.startDate).lte('date', filters.endDate)
-    } else if (filters.date) {
+    if (filters.date) {
       query = query.eq('date', filters.date)
+    } else {
+      if (filters.startDate) {
+        query = query.gte('date', filters.startDate)
+      }
+
+      if (filters.endDate) {
+        query = query.lte('date', filters.endDate)
+      }
     }
 
     if (filters.performer) {

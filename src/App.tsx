@@ -23,6 +23,8 @@ const ExcelExport = lazy(() =>
 type AppView = 'dashboard' | 'add' | 'edit' | 'search' | 'import' | 'export'
 type AppMessage = { type: 'success' | 'error'; text: string } | null
 const SIDEBAR_EXPANDED_STORAGE_KEY = 'daily-activities-tracker:sidebar-expanded'
+const DELETE_RESTRICTED_MESSAGE = 'Only Super Admin users can delete activities.'
+const IMPORT_RESTRICTED_MESSAGE = 'Only Super Admin users can access Excel import.'
 
 function App() {
   const { currentUser, isAuthLoading, login, signUp, logout, setCurrentUser } = useAuth()
@@ -101,6 +103,8 @@ function App() {
     window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, String(isSidebarExpanded))
   }, [isSidebarExpanded])
 
+  const isSuperAdmin = currentUser?.role === 'superadmin'
+
   const handleLogin = async (email: string, password: string) => {
     await login(email, password)
     setMessage({ type: 'success', text: 'Logged in successfully.' })
@@ -151,6 +155,11 @@ function App() {
   }
 
   const handleDeleteActivity = async (id: string) => {
+    if (!isSuperAdmin) {
+      setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })
+      return
+    }
+
     try {
       await removeActivity(id)
       setMessage({ type: 'success', text: 'Activity deleted successfully.' })
@@ -201,6 +210,15 @@ function App() {
     setMessage({ type: 'success', text: 'Settings updated successfully.' })
   }
 
+  const handleViewChange = (view: AppView) => {
+    if (view === 'import' && !isSuperAdmin) {
+      setMessage({ type: 'error', text: IMPORT_RESTRICTED_MESSAGE })
+      return
+    }
+
+    setCurrentView(view)
+  }
+
   if (isAuthLoading) {
     return (
       <div className="auth-container">
@@ -221,7 +239,7 @@ function App() {
       <Sidebar
         currentUser={currentUser}
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={handleViewChange}
         isExpanded={isSidebarExpanded}
         onToggleExpand={() => setIsSidebarExpanded((current) => !current)}
         onSettingsClick={() => setShowAccountSettings(true)}
@@ -278,6 +296,8 @@ function App() {
                 onEdit={handleEditActivity}
                 onDelete={handleDeleteActivity}
                 isLoading={isLoading}
+                canDelete={isSuperAdmin}
+                onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
               />
             </div>
           )}
@@ -301,6 +321,8 @@ function App() {
                   onEdit={handleEditActivity}
                   onDelete={handleDeleteActivity}
                   isLoading={isLoading}
+                  canDelete={isSuperAdmin}
+                  onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
                 />
               </div>
             </>
@@ -329,6 +351,8 @@ function App() {
                   onEdit={handleEditActivity}
                   onDelete={handleDeleteActivity}
                   isLoading={isLoading}
+                  canDelete={isSuperAdmin}
+                  onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
                 />
               </div>
             </>
@@ -358,12 +382,24 @@ function App() {
                   onEdit={handleEditActivity}
                   onDelete={handleDeleteActivity}
                   isLoading={isLoading}
+                  canDelete={isSuperAdmin}
+                  onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
                 />
               </div>
             </>
           )}
 
-          {currentView === 'import' && (
+          {currentView === 'import' && !isSuperAdmin && (
+            <div className="form-section permission-notice">
+              <h2>Excel Import Restricted</h2>
+              <p>Only Super Admin users can import activities from Excel files.</p>
+              <button className="btn btn-secondary" onClick={() => setCurrentView('dashboard')}>
+                Back to Dashboard
+              </button>
+            </div>
+          )}
+
+          {currentView === 'import' && isSuperAdmin && (
             <Suspense
               fallback={
                 <div className="form-section">
@@ -372,10 +408,13 @@ function App() {
               }
             >
               <ExcelImport
-                onImportSuccess={(count) => {
+                onImportSuccess={({ importedCount, skippedCount }) => {
                   setMessage({
                     type: 'success',
-                    text: `Successfully imported ${count} activit${count === 1 ? 'y' : 'ies'}.`,
+                    text:
+                      skippedCount > 0
+                        ? `Imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}. ${skippedCount} row${skippedCount === 1 ? ' was' : 's were'} skipped and should be reviewed.`
+                        : `Successfully imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}.`,
                   })
                   void loadActivities().catch((error) => {
                     console.error('Error refreshing activities after import:', error)

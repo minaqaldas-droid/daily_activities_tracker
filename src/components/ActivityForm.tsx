@@ -10,8 +10,16 @@ interface ActivityFormProps {
   currentUserName?: string
 }
 
+const getTodayDate = () => {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const getInitialFormData = (): Activity => ({
-  date: new Date().toISOString().split('T')[0],
+  date: getTodayDate(),
   performer: '',
   system: '',
   instrument: '',
@@ -131,88 +139,92 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="form-group">
-        <label htmlFor="date">Date *</label>
-        <input type="date" id="date" name="date" value={formData.date} onChange={handleChange} required />
-      </div>
+      <div className="form-row form-row-two-up">
+        <div className="form-group">
+          <label htmlFor="date">Date *</label>
+          <input type="date" id="date" name="date" value={formData.date} onChange={handleChange} required />
+        </div>
 
-      <div className="form-group">
-        <label htmlFor="performer">Performer *</label>
-        {performerMode === 'manual' ? (
-          <>
-            <select
-              id="performer"
-              name="performer"
-              value={formData.performer}
-              onChange={(e) => {
-                if (e.target.value === 'Other') {
-                  setPerformerIsOther(true)
+        <div className="form-group">
+          <label htmlFor="performer">Performer *</label>
+          {performerMode === 'manual' ? (
+            <>
+              <select
+                id="performer"
+                name="performer"
+                value={formData.performer}
+                onChange={(e) => {
+                  if (e.target.value === 'Other') {
+                    setPerformerIsOther(true)
+                    setFormData((prev) => ({
+                      ...prev,
+                      performer: 'Other',
+                    }))
+                    return
+                  }
+
+                  setPerformerIsOther(false)
                   setFormData((prev) => ({
                     ...prev,
-                    performer: 'Other',
+                    performer: e.target.value,
                   }))
-                  return
-                }
-
-                setPerformerIsOther(false)
-                setFormData((prev) => ({
-                  ...prev,
-                  performer: e.target.value,
-                  }))
-              }}
-              required
-              disabled={isLoadingUsers}
-            >
-              <option value="">-- Select Performer --</option>
-              {usersList.map((user) => (
-                <option key={user.id} value={user.name}>
-                  {user.name}
-                </option>
-              ))}
-              <option value="Other">Other</option>
-            </select>
-            <small className="form-hint">Select a team member or choose "Other".</small>
-          </>
-        ) : (
-          <>
-            <input
-              type="text"
-              id="performer"
-              name="performer"
-              value={formData.performer}
-              onChange={handleChange}
-              disabled
-              placeholder="Enter performer name"
-              required
-            />
-            <small className="form-hint">Auto-filled from your signed-in account.</small>
-          </>
-        )}
+                }}
+                required
+                disabled={isLoadingUsers}
+              >
+                <option value="">-- Select Performer --</option>
+                {usersList.map((user) => (
+                  <option key={user.id} value={user.name}>
+                    {user.name}
+                  </option>
+                ))}
+                <option value="Other">Other</option>
+              </select>
+              <small className="form-hint">Select a team member or choose "Other".</small>
+            </>
+          ) : (
+            <>
+              <input
+                type="text"
+                id="performer"
+                name="performer"
+                value={formData.performer}
+                onChange={handleChange}
+                disabled
+                placeholder="Enter performer name"
+                required
+              />
+              <small className="form-hint">Auto-filled from your signed-in account.</small>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="form-group">
-        <label htmlFor="system">System *</label>
-        <select id="system" name="system" value={formData.system} onChange={handleChange} required>
-          <option value="">-- Select System --</option>
-          {SYSTEM_OPTIONS.map((system) => (
-            <option key={system} value={system}>
-              {system}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="form-row form-row-two-up">
+        <div className="form-group">
+          <label htmlFor="system">System *</label>
+          <select id="system" name="system" value={formData.system} onChange={handleChange} required>
+            <option value="">-- Select System --</option>
+            {SYSTEM_OPTIONS.map((system) => (
+              <option key={system} value={system}>
+                {system}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="form-group">
-        <label htmlFor="instrument">Instrument/Tag *</label>
-        <input
-          type="text"
-          id="instrument"
-          name="instrument"
-          value={formData.instrument}
-          onChange={handleChange}
-          placeholder="e.g. 920TT305, or any relevant tag, PLC Panel, etc."
-          required
-        />
+        <div className="form-group">
+          <label htmlFor="instrument">Instrument/Tag *</label>
+          <input
+            type="text"
+            id="instrument"
+            name="instrument"
+            value={formData.instrument}
+            onChange={handleChange}
+            placeholder="e.g. 920TT305, or any relevant tag, PLC Panel, etc."
+            required
+          />
+        </div>
       </div>
 
       <div className="form-group">

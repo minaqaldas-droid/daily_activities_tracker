@@ -8,6 +8,8 @@ interface DashboardProps {
   onEdit?: (activity: Activity) => void
   onDelete?: (id: string) => Promise<void>
   isLoading?: boolean
+  canDelete?: boolean
+  onDeleteDenied?: () => void
 }
 
 interface DashboardStats {
@@ -28,7 +30,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   performerName, 
   onEdit, 
   onDelete, 
-  isLoading = false 
+  isLoading = false,
+  canDelete = true,
+  onDeleteDenied,
 }) => {
   const [stats, setStats] = useState<DashboardStats>({
     totalActivities: 0,
@@ -350,6 +354,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             onEdit={onEdit}
             onDelete={onDelete}
             isLoading={isLoading}
+            canDelete={canDelete}
+            onDeleteDenied={onDeleteDenied}
           />
         </div>
       )}
