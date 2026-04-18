@@ -8,6 +8,22 @@ const DEFAULT_SETTINGS: Settings = {
   performer_mode: 'manual',
 }
 
+const DEFAULT_FAVICON_PATH = '/favicon.svg'
+const FAVICON_LINK_ID = 'app-favicon'
+
+function ensureFaviconLink() {
+  let faviconLink = document.getElementById(FAVICON_LINK_ID) as HTMLLinkElement | null
+
+  if (!faviconLink) {
+    faviconLink = document.createElement('link')
+    faviconLink.id = FAVICON_LINK_ID
+    faviconLink.rel = 'icon'
+    document.head.appendChild(faviconLink)
+  }
+
+  return faviconLink
+}
+
 export function useSettings(isEnabled: boolean) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
@@ -34,6 +50,24 @@ export function useSettings(isEnabled: boolean) {
       settings.primary_color || DEFAULT_SETTINGS.primary_color || '#667eea'
     )
   }, [settings.primary_color])
+
+  useEffect(() => {
+    document.title = settings.webapp_name?.trim() || DEFAULT_SETTINGS.webapp_name
+  }, [settings.webapp_name])
+
+  useEffect(() => {
+    const faviconLink = ensureFaviconLink()
+    const faviconHref = settings.logo_url?.trim() || DEFAULT_FAVICON_PATH
+
+    faviconLink.href = faviconHref
+
+    if (faviconHref.endsWith('.svg')) {
+      faviconLink.type = 'image/svg+xml'
+      return
+    }
+
+    faviconLink.removeAttribute('type')
+  }, [settings.logo_url])
 
   return {
     settings,

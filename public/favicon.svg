@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Daily Activities Tracker icon">
+  <defs>
+    <linearGradient id="favicon-gradient" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7d8cff" />
+      <stop offset="1" stop-color="#764ba2" />
+    </linearGradient>
+    <linearGradient id="check-gradient" x1="21" y1="24" x2="44" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#edf2ff" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#favicon-gradient)" />
+  <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" fill="none" stroke="#ffffff" stroke-opacity="0.14" />
+  <rect x="15" y="17" width="24" height="6" rx="3" fill="#ffffff" fill-opacity="0.28" />
+  <rect x="15" y="28" width="17" height="6" rx="3" fill="#ffffff" fill-opacity="0.18" />
+  <path
+    d="M21 40.5 28 47.5 43.5 30"
+    fill="none"
+    stroke="url(#check-gradient)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="6"
+  />
+</svg>
