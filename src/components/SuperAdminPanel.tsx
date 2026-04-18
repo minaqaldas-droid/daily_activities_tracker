@@ -251,7 +251,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   disabled={isSubmitting || isLoading}
                 />
                 <span className="radio-label">
-                  <strong>Manual Entry</strong> Users can choose or type the performer name.
+                  <strong>👤 Manual Entry</strong> Users can choose or type the performer name.
                 </span>
               </label>
               <label className="radio-option">
@@ -264,7 +264,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   disabled={isSubmitting || isLoading}
                 />
                 <span className="radio-label">
-                  <strong>Auto-assign</strong> The performer is filled from the logged-in user.
+                  <strong>🔏 Auto-assign</strong> The performer is filled from the logged-in user.
                 </span>
               </label>
             </div>
