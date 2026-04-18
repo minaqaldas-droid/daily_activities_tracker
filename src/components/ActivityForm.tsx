@@ -50,8 +50,25 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
   }, [currentUserName, initialData, performerMode])
 
   useEffect(() => {
+    if (performerMode !== 'manual') {
+      setPerformerIsOther(false)
+      return
+    }
+
     const isKnownUser = usersList.some((user) => user.name === formData.performer)
-    setPerformerIsOther(Boolean(formData.performer) && performerMode === 'manual' && !isKnownUser)
+    const shouldNormalizeToOther =
+      Boolean(formData.performer) && formData.performer !== 'Other' && !isKnownUser
+
+    if (shouldNormalizeToOther) {
+      setFormData((prev) => ({
+        ...prev,
+        performer: 'Other',
+      }))
+      setPerformerIsOther(true)
+      return
+    }
+
+    setPerformerIsOther(formData.performer === 'Other')
   }, [formData.performer, performerMode, usersList])
 
   useEffect(() => {
@@ -126,13 +143,13 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
             <select
               id="performer"
               name="performer"
-              value={performerIsOther ? 'OTHER' : formData.performer}
+              value={formData.performer}
               onChange={(e) => {
-                if (e.target.value === 'OTHER') {
+                if (e.target.value === 'Other') {
                   setPerformerIsOther(true)
                   setFormData((prev) => ({
                     ...prev,
-                    performer: '',
+                    performer: 'Other',
                   }))
                   return
                 }
@@ -141,9 +158,9 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
                 setFormData((prev) => ({
                   ...prev,
                   performer: e.target.value,
-                }))
+                  }))
               }}
-              required={!performerIsOther}
+              required
               disabled={isLoadingUsers}
             >
               <option value="">-- Select Performer --</option>
@@ -152,27 +169,9 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
                   {user.name}
                 </option>
               ))}
-              <option value="OTHER">Other</option>
+              <option value="Other">Other</option>
             </select>
             <small className="form-hint">Select a team member or choose "Other".</small>
-
-            {performerIsOther && (
-              <input
-                type="text"
-                id="performer-other"
-                name="performer-other"
-                value={formData.performer}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    performer: e.target.value,
-                  }))
-                }
-                placeholder="Enter performer name"
-                required
-                style={{ marginTop: '10px' }}
-              />
-            )}
           </>
         ) : (
           <>
