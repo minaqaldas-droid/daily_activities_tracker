@@ -328,9 +328,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       <div className="dashboard-chart-grid">
         <PieChartCard
-          icon="⚙️"
-          title="Activities by System"
-          data={systemChartData}
+          icon="🧰"
+          title="Activities by Type"
+          data={activityTypeChartData}
           total={stats.totalActivities}
         />
         <PieChartCard
@@ -340,9 +340,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
           total={stats.totalActivities}
         />
         <PieChartCard
-          icon="🧰"
-          title="Activities by Type"
-          data={activityTypeChartData}
+          icon="⚙️"
+          title="Activities by System"
+          data={systemChartData}
           total={stats.totalActivities}
         />
         <BarChartCard icon="🏷️" title="Top Tags" data={tagChartData} />

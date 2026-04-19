@@ -57,8 +57,8 @@ export const ActivityList: React.FC<ActivityListProps> = ({
           <tr>
             <th className="col-date">Date</th>
             <th className="col-performer">Performer</th>
-            <th className="col-system">System</th>
             <th className="col-type">Type</th>
+            <th className="col-system">System</th>
             <th className="col-tag">Tag</th>
             <th className="col-problem">Problem</th>
             <th className="col-action">Action</th>
@@ -80,9 +80,6 @@ export const ActivityList: React.FC<ActivityListProps> = ({
                     <span className="date-badge">{formatDateForDisplay(activity.date)}</span>
                   </td>
                   <td className="col-performer">{activity.performer}</td>
-                  <td className="col-system">
-                    <span className="system-badge">{activity.system}</span>
-                  </td>
                   <td className="col-type">
                     {activity.activityType ? (
                       <span
@@ -92,6 +89,9 @@ export const ActivityList: React.FC<ActivityListProps> = ({
                         {getActivityTypeShortLabel(activity.activityType)}
                       </span>
                     ) : null}
+                  </td>
+                  <td className="col-system">
+                    <span className="system-badge">{activity.system}</span>
                   </td>
                   <td className="col-tag">
                     <span className="tag-badge">{activity.tag}</span>

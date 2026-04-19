@@ -315,7 +315,7 @@ function App() {
               </div>
 
               <div className="list-section">
-                <h2>Recent Activities</h2>
+                <h2>📋 Recent Activities</h2>
                 <ActivityList
                   activities={activities.slice(0, 10)}
                   onEdit={handleEditActivity}

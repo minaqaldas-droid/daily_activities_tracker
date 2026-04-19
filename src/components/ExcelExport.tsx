@@ -47,8 +47,8 @@ export const ExcelExport: React.FC<ExcelExportProps> = ({
       const exportData = dataToExport.map((activity) => ({
         Date: activity.date,
         Performer: activity.performer,
-        System: activity.system,
         'Activity Type': activity.activityType || '',
+        System: activity.system,
         Tag: activity.tag,
         Problem: activity.problem,
         Action: activity.action,
@@ -64,8 +64,8 @@ export const ExcelExport: React.FC<ExcelExportProps> = ({
       worksheet['!cols'] = [
         { wch: 12 },
         { wch: 18 },
-        { wch: 12 },
         { wch: 24 },
+        { wch: 12 },
         { wch: 16 },
         { wch: 30 },
         { wch: 30 },

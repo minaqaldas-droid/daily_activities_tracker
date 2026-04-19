@@ -295,8 +295,8 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
               <tr>
                 <th>Date</th>
                 <th>Performer</th>
-                <th>System</th>
                 <th>Activity Type</th>
+                <th>System</th>
                 <th>Tag</th>
                 <th>Problem</th>
                 <th>Action</th>
@@ -307,8 +307,8 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
               <tr>
                 <td>3-Apr-2026</td>
                 <td>Ahmed Mohamed</td>
-                <td>DCS</td>
                 <td>PM</td>
+                <td>DCS</td>
                 <td>920TT305</td>
                 <td>Add H Alarm</td>
                 <td>Added H Alarm at 100C</td>
@@ -317,8 +317,8 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
               <tr>
                 <td>4-3-26</td>
                 <td></td>
-                <td>LCS</td>
                 <td>CM</td>
+                <td>LCS</td>
                 <td>LCS Alarm</td>
                 <td>CH1 S 7R Fault</td>
                 <td>Checked communication card</td>
@@ -327,8 +327,8 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
               <tr>
                 <td>03/04/2026</td>
                 <td></td>
-                <td>DCS</td>
                 <td>CM</td>
+                <td>DCS</td>
                 <td>920TT305</td>
                 <td>Reading error</td>
                 <td>Checked transmitter</td>
@@ -337,8 +337,8 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
               <tr>
                 <td>04-03-2026</td>
                 <td>Sara Ali</td>
-                <td>PLC</td>
                 <td>Mod</td>
+                <td>PLC</td>
                 <td>200FIC310</td>
                 <td>Valve response delay</td>
                 <td>Tuning was made</td>
