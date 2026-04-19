@@ -4,6 +4,7 @@ export const SYSTEM_OPTIONS = [
   'FGS',
   'ACCS',
   'LCS',
+  'EDCS',  
   '200K1A',
   '200K1B',
   '200K2A',

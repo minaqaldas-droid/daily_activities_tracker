@@ -102,16 +102,15 @@ function PieChartCard({
   title,
   data,
   total,
-  onOpen,
+  onValueSelect,
 }: {
   icon: string
   title: string
   data: ChartDatum[]
   total: number
-  onOpen?: () => void
+  onValueSelect?: (item: ChartDatum) => void
 }) {
   const hasData = total > 0 && data.length > 0
-  const isInteractive = Boolean(onOpen)
 
   let currentAngle = 0
   const slices = data.map((item, index) => {
@@ -141,13 +140,7 @@ function PieChartCard({
   })
 
   return (
-    <section
-      className={`dashboard-section dashboard-chart-card ${isInteractive ? 'dashboard-card-actionable' : ''}`}
-      onClick={onOpen}
-      onKeyDown={(event) => handleDashboardCardKeyDown(event, onOpen)}
-      role={isInteractive ? 'button' : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
-    >
+    <section className="dashboard-section dashboard-chart-card">
       <h3 className="dashboard-section-title">
         <span className="dashboard-section-icon" aria-hidden="true">
           {icon}
@@ -171,9 +164,15 @@ function PieChartCard({
                     className="legend-color"
                     style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                   ></span>
-                  <span className="legend-label">
-                    {item.label}: {item.value} ({percentage}%)
-                  </span>
+                  <span className="legend-label">{item.label}</span>
+                  <button
+                    type="button"
+                    className="legend-value-button"
+                    onClick={() => onValueSelect?.(item)}
+                    disabled={!onValueSelect}
+                  >
+                    {item.value} ({percentage}%)
+                  </button>
                 </div>
               )
             })}
@@ -192,25 +191,18 @@ function BarChartCard({
   icon,
   title,
   data,
-  onOpen,
+  onValueSelect,
 }: {
   icon: string
   title: string
   data: ChartDatum[]
-  onOpen?: () => void
+  onValueSelect?: (item: ChartDatum) => void
 }) {
   const hasData = data.length > 0
   const maxValue = hasData ? data[0].value : 0
-  const isInteractive = Boolean(onOpen)
 
   return (
-    <section
-      className={`dashboard-section dashboard-chart-card ${isInteractive ? 'dashboard-card-actionable' : ''}`}
-      onClick={onOpen}
-      onKeyDown={(event) => handleDashboardCardKeyDown(event, onOpen)}
-      role={isInteractive ? 'button' : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
-    >
+    <section className="dashboard-section dashboard-chart-card">
       <h3 className="dashboard-section-title">
         <span className="dashboard-section-icon" aria-hidden="true">
           {icon}
@@ -232,7 +224,14 @@ function BarChartCard({
                   }}
                 ></div>
               </div>
-              <span className="chart-value">{item.value}</span>
+              <button
+                type="button"
+                className="chart-value chart-value-button"
+                onClick={() => onValueSelect?.(item)}
+                disabled={!onValueSelect}
+              >
+                {item.value}
+              </button>
             </div>
           ))}
         </div>
@@ -326,6 +325,43 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const openActivityResults = (request: DashboardActivityRequest) => {
     onOpenActivityResults?.(request)
+  }
+
+  const openActivityTypeResults = (item: ChartDatum) => {
+    const targetType = item.key === 'unspecified' ? '' : item.key
+    openActivityResults({
+      title: `🧰 ${item.label}`,
+      description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for ${item.label}.`,
+      activities: activities.filter((activity) => (activity.activityType || '') === targetType),
+      exportFilename: `Dashboard_Activity_Type_${item.label.replace(/\s+/g, '_')}.xlsx`,
+    })
+  }
+
+  const openPerformerResults = (item: ChartDatum) => {
+    openActivityResults({
+      title: `👥 ${item.label}`,
+      description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for performer ${item.label}.`,
+      activities: activities.filter((activity) => (activity.performer || '') === item.key),
+      exportFilename: `Dashboard_Performer_${item.label.replace(/\s+/g, '_')}.xlsx`,
+    })
+  }
+
+  const openSystemResults = (item: ChartDatum) => {
+    openActivityResults({
+      title: `⚙️ ${item.label}`,
+      description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for system ${item.label}.`,
+      activities: activities.filter((activity) => (activity.system || '') === item.key),
+      exportFilename: `Dashboard_System_${item.label.replace(/\s+/g, '_')}.xlsx`,
+    })
+  }
+
+  const openTagResults = (item: ChartDatum) => {
+    openActivityResults({
+      title: `🏷️ ${item.label}`,
+      description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} tagged with ${item.label}.`,
+      activities: activities.filter((activity) => (activity.tag || '') === item.key),
+      exportFilename: `Dashboard_Tag_${item.label.replace(/\s+/g, '_')}.xlsx`,
+    })
   }
 
   return (
@@ -525,55 +561,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
           title="Activities by Type"
           data={activityTypeChartData}
           total={stats.totalActivities}
-          onOpen={() =>
-            openActivityResults({
-              title: '🧰 Activities by Type',
-              description: 'Showing the activities represented in the activity type breakdown.',
-              activities,
-              exportFilename: 'Dashboard_Activities_By_Type.xlsx',
-            })
-          }
+          onValueSelect={openActivityTypeResults}
         />
         <PieChartCard
           icon="👥"
           title="Activities by Performer"
           data={performerChartData}
           total={stats.totalActivities}
-          onOpen={() =>
-            openActivityResults({
-              title: '👥 Activities by Performer',
-              description: 'Showing the activities represented in the performer breakdown.',
-              activities,
-              exportFilename: 'Dashboard_Activities_By_Performer.xlsx',
-            })
-          }
+          onValueSelect={openPerformerResults}
         />
         <PieChartCard
           icon="⚙️"
           title="Activities by System"
           data={systemChartData}
           total={stats.totalActivities}
-          onOpen={() =>
-            openActivityResults({
-              title: '⚙️ Activities by System',
-              description: 'Showing the activities represented in the system breakdown.',
-              activities,
-              exportFilename: 'Dashboard_Activities_By_System.xlsx',
-            })
-          }
+          onValueSelect={openSystemResults}
         />
         <BarChartCard
           icon="🏷️"
           title="Top Tags"
           data={tagChartData}
-          onOpen={() =>
-            openActivityResults({
-              title: '🏷️ Top Tags',
-              description: 'Showing the activities behind the top tag counts.',
-              activities: activitiesWithTags,
-              exportFilename: 'Dashboard_Top_Tags.xlsx',
-            })
-          }
+          onValueSelect={openTagResults}
         />
       </div>
 
