@@ -72,7 +72,7 @@ function createActivityTypeChartData(source: Map<string, number>) {
     })
   }
 
-  return data
+  return data.sort((a, b) => b.value - a.value)
 }
 
 function PieChartCard({
@@ -117,8 +117,11 @@ function PieChartCard({
 
   return (
     <section className="dashboard-section dashboard-chart-card">
-      <h3>
-        {icon} {title}
+      <h3 className="dashboard-section-title">
+        <span className="dashboard-section-icon" aria-hidden="true">
+          {icon}
+        </span>
+        <span>{title}</span>
       </h3>
       {hasData ? (
         <div className="chart-container">
@@ -168,8 +171,11 @@ function BarChartCard({
 
   return (
     <section className="dashboard-section dashboard-chart-card">
-      <h3>
-        {icon} {title}
+      <h3 className="dashboard-section-title">
+        <span className="dashboard-section-icon" aria-hidden="true">
+          {icon}
+        </span>
+        <span>{title}</span>
       </h3>
       {hasData ? (
         <div className="chart-list">
@@ -274,7 +280,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="dashboard">
-      <h2>📊 Comprehensive Dashboard</h2>
+      <h2 className="dashboard-title">
+        <span className="dashboard-title-icon" aria-hidden="true">
+          📊
+        </span>
+        <span>Comprehensive Dashboard</span>
+      </h2>
 
       <div className="stats-grid">
         <div className="stat-card">
@@ -320,7 +331,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="stat-card">
           <div className="stat-icon">📅</div>
           <div className="stat-content">
-            <h3>This Week</h3>
+            <h3>This Week Activities</h3>
             <p className="stat-value">{stats.thisWeekActivities}</p>
           </div>
         </div>
@@ -350,7 +361,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {stats.recentActivities.length > 0 && onEdit && onDelete && (
         <div className="dashboard-section recent-activities-table">
-          <h3>📋 Recent Activities</h3>
+          <h3 className="dashboard-section-title">
+            <span className="dashboard-section-icon" aria-hidden="true">
+              📋
+            </span>
+            <span>Recent Activities</span>
+          </h3>
           <ActivityList
             activities={stats.recentActivities}
             onEdit={onEdit}
