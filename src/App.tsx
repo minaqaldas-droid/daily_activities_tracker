@@ -118,6 +118,18 @@ function App() {
     window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, String(isSidebarExpanded))
   }, [isSidebarExpanded])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    document.body.classList.toggle('app-shell-active', Boolean(currentUser))
+
+    return () => {
+      document.body.classList.remove('app-shell-active')
+    }
+  }, [currentUser])
+
   const isSuperAdmin = currentUser?.role === 'superadmin'
 
   const buildSearchResultsPopup = (sourceActivities: Activity[]): ResultsPopupState => ({
@@ -314,25 +326,198 @@ function App() {
       />
 
       <div className="main-content">
-        <div className="header">
-          <div className="header-content">
-            <div className="header-logo-section">
-              {settings.logo_url && (
-                <img src={settings.logo_url} alt="App Logo" className="app-logo" onError={() => {}} />
-              )}
-              <div>
-                <h1>{settings.webapp_name}</h1>
-                <p>Track your daily work activities.</p>
+        <div className="main-content-shell">
+          <div className="header">
+            <div className="header-content">
+              <div className="header-logo-section">
+                {settings.logo_url && (
+                  <img src={settings.logo_url} alt="App Logo" className="app-logo" onError={() => {}} />
+                )}
+                <div>
+                  <h1>{settings.webapp_name}</h1>
+                  <p>Track your daily work activities.</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {message && (
-          <div className={message.type === 'success' ? 'success-message' : 'error-message'}>
-            {message.text}
+          {message && (
+            <div className={message.type === 'success' ? 'success-message' : 'error-message'}>
+              {message.text}
+            </div>
+          )}
+
+          <div className="content-wrapper">
+            {currentView === 'dashboard' && (
+              <div className="dashboard-section-main">
+                <Dashboard
+                  activities={activities}
+                  performerName={currentUser.name}
+                  onEdit={handleEditActivity}
+                  onDelete={handleDeleteActivity}
+                  isLoading={isLoading}
+                  canDelete={isSuperAdmin}
+                  onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
+                  onOpenActivityResults={handleOpenDashboardResults}
+                />
+              </div>
+            )}
+
+            {currentView === 'add' && (
+              <div className="form-section">
+                <h2>Add New Activity</h2>
+                <ActivityForm
+                  onSubmit={handleAddOrUpdateActivity}
+                  isLoading={isLoading}
+                  performerMode={settings.performer_mode || 'manual'}
+                  currentUserName={currentUser.name}
+                />
+              </div>
+            )}
+
+            {currentView === 'edit' && editingId && editingData ? (
+              <>
+                <div className="form-section">
+                  <h2>Edit Activity</h2>
+                  <ActivityForm
+                    onSubmit={handleAddOrUpdateActivity}
+                    initialData={editingData}
+                    isLoading={isLoading}
+                    performerMode={settings.performer_mode || 'manual'}
+                    currentUserName={currentUser.name}
+                  />
+                  <button className="btn btn-secondary" onClick={handleCancelEdit} style={{ marginTop: '10px' }}>
+                    Back to Dashboard
+                  </button>
+                </div>
+
+                <div className="list-section">
+                  <h2>Latest 10 Activities</h2>
+                  <ActivityList
+                    activities={activities.slice(0, 10)}
+                    onEdit={handleEditActivity}
+                    onDelete={handleDeleteActivity}
+                    isLoading={isLoading}
+                    canDelete={isSuperAdmin}
+                    onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
+                  />
+                </div>
+              </>
+            ) : currentView === 'edit' ? (
+              <div className="empty-state">
+                <p>No activity selected for editing. Choose one from the dashboard or search results.</p>
+                <div className="empty-state-actions">
+                  <button className="btn btn-primary" onClick={() => handleViewChange('dashboard')}>
+                    Go to Dashboard
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => handleViewChange('search')}>
+                    Go to Search
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {currentView === 'search' && (
+              <>
+                <div className="search-section">
+                  <SearchFilter onSearch={handleSearch} isLoading={isLoading} />
+                </div>
+
+                {searchApplied ? (
+                  <div className="list-section search-results-launcher">
+                    <h2>{searchResultsPopupState.title}</h2>
+                    <p>{searchResultsPopupState.description}</p>
+
+                    <div className="search-actions">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => setResultsPopup(searchResultsPopupState)}
+                      >
+                        Reopen Results Popup
+                      </button>
+                      <span className="search-results-count">
+                        {searchResultsPopupState.activities.length} activit
+                        {searchResultsPopupState.activities.length === 1 ? 'y' : 'ies'} ready
+                      </span>
+                    </div>
+
+                    <div className="search-info">
+                      Found {filteredActivities.length} activit{filteredActivities.length === 1 ? 'y' : 'ies'}.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="list-section">
+                    <h2>Latest 10 Activities</h2>
+                    <ActivityList
+                      activities={latestSearchActivities}
+                      onEdit={handleEditActivity}
+                      onDelete={handleDeleteActivity}
+                      isLoading={isLoading}
+                      canDelete={isSuperAdmin}
+                      onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
+                      emptyMessage="No activities available yet."
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {currentView === 'import' && !isSuperAdmin && (
+              <div className="form-section permission-notice">
+                <h2>Excel Import Restricted</h2>
+                <p>Only Super Admin users can import activities from Excel files.</p>
+                <button className="btn btn-secondary" onClick={() => setCurrentView('dashboard')}>
+                  Back to Dashboard
+                </button>
+              </div>
+            )}
+
+            {currentView === 'import' && isSuperAdmin && (
+              <Suspense
+                fallback={
+                  <div className="form-section">
+                    <p>Loading import tools...</p>
+                  </div>
+                }
+              >
+                <ExcelImport
+                  onImportSuccess={({ importedCount, skippedCount }) => {
+                    setMessage({
+                      type: 'success',
+                      text:
+                        skippedCount > 0
+                          ? `Imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}. ${skippedCount} row${skippedCount === 1 ? ' was' : 's were'} skipped and should be reviewed.`
+                          : `Successfully imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}.`,
+                    })
+                    void loadActivities().catch((error) => {
+                      console.error('Error refreshing activities after import:', error)
+                    })
+                  }}
+                  onImportError={(error) => {
+                    setMessage({
+                      type: 'error',
+                      text: `Import failed: ${error}`,
+                    })
+                  }}
+                  isLoading={isLoading}
+                />
+              </Suspense>
+            )}
+
+            {currentView === 'export' && (
+              <Suspense
+                fallback={
+                  <div className="form-section">
+                    <p>Loading export tools...</p>
+                  </div>
+                }
+              >
+                <ExcelExport activities={activities} isLoading={isLoading} />
+              </Suspense>
+            )}
           </div>
-        )}
+        </div>
 
         {showAccountSettings && (
           <AccountSettings
@@ -352,172 +537,6 @@ function App() {
             isLoading={isLoading}
           />
         )}
-
-        <div className="content-wrapper">
-          {currentView === 'dashboard' && (
-            <div className="dashboard-section-main">
-              <Dashboard
-                activities={activities}
-                performerName={currentUser.name}
-                onEdit={handleEditActivity}
-                onDelete={handleDeleteActivity}
-                isLoading={isLoading}
-                canDelete={isSuperAdmin}
-                onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
-                onOpenActivityResults={handleOpenDashboardResults}
-              />
-            </div>
-          )}
-
-          {currentView === 'add' && (
-            <div className="form-section">
-              <h2>Add New Activity</h2>
-              <ActivityForm
-                onSubmit={handleAddOrUpdateActivity}
-                isLoading={isLoading}
-                performerMode={settings.performer_mode || 'manual'}
-                currentUserName={currentUser.name}
-              />
-            </div>
-          )}
-
-          {currentView === 'edit' && editingId && editingData ? (
-            <>
-              <div className="form-section">
-                <h2>Edit Activity</h2>
-                <ActivityForm
-                  onSubmit={handleAddOrUpdateActivity}
-                  initialData={editingData}
-                  isLoading={isLoading}
-                  performerMode={settings.performer_mode || 'manual'}
-                  currentUserName={currentUser.name}
-                />
-                <button className="btn btn-secondary" onClick={handleCancelEdit} style={{ marginTop: '10px' }}>
-                  Back to Dashboard
-                </button>
-              </div>
-
-              <div className="list-section">
-                <h2>Latest 10 Activities</h2>
-                <ActivityList
-                  activities={activities.slice(0, 10)}
-                  onEdit={handleEditActivity}
-                  onDelete={handleDeleteActivity}
-                  isLoading={isLoading}
-                  canDelete={isSuperAdmin}
-                  onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
-                />
-              </div>
-            </>
-          ) : currentView === 'edit' ? (
-            <div className="empty-state">
-              <p>No activity selected for editing. Choose one from the dashboard or search results.</p>
-              <button className="btn btn-primary" onClick={() => setCurrentView('dashboard')}>
-                Go to Dashboard
-              </button>
-            </div>
-          ) : null}
-
-          {currentView === 'search' && (
-            <>
-              <div className="search-section">
-                <SearchFilter onSearch={handleSearch} isLoading={isLoading} />
-              </div>
-
-              {searchApplied ? (
-                <div className="list-section search-results-launcher">
-                  <h2>{searchResultsPopupState.title}</h2>
-                  <p>{searchResultsPopupState.description}</p>
-
-                  <div className="search-actions">
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={() => setResultsPopup(searchResultsPopupState)}
-                    >
-                      Reopen Results Popup
-                    </button>
-                    <span className="search-results-count">
-                      {searchResultsPopupState.activities.length} activit
-                      {searchResultsPopupState.activities.length === 1 ? 'y' : 'ies'} ready
-                    </span>
-                  </div>
-
-                  <div className="search-info">
-                    Found {filteredActivities.length} activit{filteredActivities.length === 1 ? 'y' : 'ies'}.
-                  </div>
-                </div>
-              ) : (
-                <div className="list-section">
-                  <h2>Latest 10 Activities</h2>
-                  <ActivityList
-                    activities={latestSearchActivities}
-                    onEdit={handleEditActivity}
-                    onDelete={handleDeleteActivity}
-                    isLoading={isLoading}
-                    canDelete={isSuperAdmin}
-                    onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
-                    emptyMessage="No activities available yet."
-                  />
-                </div>
-              )}
-            </>
-          )}
-
-          {currentView === 'import' && !isSuperAdmin && (
-            <div className="form-section permission-notice">
-              <h2>Excel Import Restricted</h2>
-              <p>Only Super Admin users can import activities from Excel files.</p>
-              <button className="btn btn-secondary" onClick={() => setCurrentView('dashboard')}>
-                Back to Dashboard
-              </button>
-            </div>
-          )}
-
-          {currentView === 'import' && isSuperAdmin && (
-            <Suspense
-              fallback={
-                <div className="form-section">
-                  <p>Loading import tools...</p>
-                </div>
-              }
-            >
-              <ExcelImport
-                onImportSuccess={({ importedCount, skippedCount }) => {
-                  setMessage({
-                    type: 'success',
-                    text:
-                      skippedCount > 0
-                        ? `Imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}. ${skippedCount} row${skippedCount === 1 ? ' was' : 's were'} skipped and should be reviewed.`
-                        : `Successfully imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}.`,
-                  })
-                  void loadActivities().catch((error) => {
-                    console.error('Error refreshing activities after import:', error)
-                  })
-                }}
-                onImportError={(error) => {
-                  setMessage({
-                    type: 'error',
-                    text: `Import failed: ${error}`,
-                  })
-                }}
-                isLoading={isLoading}
-              />
-            </Suspense>
-          )}
-
-          {currentView === 'export' && (
-            <Suspense
-              fallback={
-                <div className="form-section">
-                  <p>Loading export tools...</p>
-                </div>
-              }
-            >
-              <ExcelExport activities={activities} isLoading={isLoading} />
-            </Suspense>
-          )}
-        </div>
 
         <ActivityResultsPopup
           isOpen={Boolean(resultsPopup)}

@@ -22,6 +22,11 @@ body {
   padding: 20px;
 }
 
+body.app-shell-active {
+  padding: 0;
+  overflow-x: hidden;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -242,6 +247,15 @@ body {
   margin-bottom: 10px;
 }
 
+.empty-state-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
 .modal {
   display: none;
   position: fixed;
@@ -430,12 +444,15 @@ body {
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .header-logo-section {
   display: flex;
   align-items: center;
   gap: 20px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .app-logo {
@@ -1866,6 +1883,7 @@ body {
 .app-layout {
   --sidebar-width: var(--sidebar-width-collapsed);
   display: flex;
+  width: 100%;
   min-height: 100vh;
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
   padding: 0;
@@ -2114,9 +2132,24 @@ body {
 
 .main-content {
   margin-left: var(--sidebar-width);
-  flex: 1;
-  padding: 20px;
-  transition: margin-left 0.25s ease;
+  width: calc(100% - var(--sidebar-width));
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 20px clamp(18px, 2.4vw, 30px) 32px;
+  transition:
+    margin-left 0.25s ease,
+    width 0.25s ease,
+    padding 0.25s ease;
+}
+
+.main-content-shell {
+  width: min(100%, 1560px);
+  min-width: 0;
+  margin: 0 auto;
+}
+
+.content-wrapper {
+  min-width: 0;
 }
 
 /* Table Styles */
@@ -2282,6 +2315,7 @@ body {
 
   .main-content {
     margin-left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
   }
 
   .col-problem,
@@ -2297,6 +2331,7 @@ body {
 
   .main-content {
     margin-left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
     padding: 15px;
   }
 
@@ -2438,7 +2473,13 @@ body {
 
   .main-content {
     margin-left: 0;
+    width: 100%;
+    flex: 1 1 auto;
     padding: 15px;
+  }
+
+  .main-content-shell {
+    width: 100%;
   }
 
   .header {
@@ -2548,6 +2589,15 @@ body {
 
   .main-content {
     padding: 10px;
+  }
+
+  .empty-state-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .empty-state-actions .btn {
+    width: 100%;
   }
 
   .header {
