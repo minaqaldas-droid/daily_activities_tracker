@@ -78,11 +78,13 @@ export const ActivityList: React.FC<ActivityListProps> = ({
                   onClick={() => activity.comments && toggleExpand(activity.id)}
                   style={{ cursor: activity.comments ? 'pointer' : 'default' }}
                 >
-                  <td className="col-date">
+                  <td className="col-date" data-label="Date">
                     <span className="date-badge">{formatDateForDisplay(activity.date)}</span>
                   </td>
-                  <td className="col-performer">{activity.performer}</td>
-                  <td className="col-type">
+                  <td className="col-performer" data-label="Performer">
+                    {activity.performer}
+                  </td>
+                  <td className="col-type" data-label="Type">
                     {activity.activityType ? (
                       <span
                         className={`type-badge ${getActivityTypeBadgeClassName(activity.activityType)}`}
@@ -92,19 +94,19 @@ export const ActivityList: React.FC<ActivityListProps> = ({
                       </span>
                     ) : null}
                   </td>
-                  <td className="col-system">
+                  <td className="col-system" data-label="System">
                     <span className="system-badge">{activity.system}</span>
                   </td>
-                  <td className="col-tag">
+                  <td className="col-tag" data-label="Tag">
                     <span className="tag-badge">{activity.tag}</span>
                   </td>
-                  <td className="col-problem">
+                  <td className="col-problem" data-label="Problem">
                     <div className="truncate">{activity.problem}</div>
                   </td>
-                  <td className="col-action">
+                  <td className="col-action" data-label="Action">
                     <div className="truncate">{activity.action}</div>
                   </td>
-                  <td className="col-actions">
+                  <td className="col-actions" data-label="Edit / Delete">
                     <div className="activity-action-buttons">
                       <button
                         type="button"

@@ -24,6 +24,15 @@ const ExcelExport = lazy(() =>
 type AppView = 'dashboard' | 'add' | 'edit' | 'search' | 'import' | 'export'
 type AppMessage = { type: 'success' | 'error'; text: string } | null
 
+const APP_VIEW_LABELS: Record<AppView, string> = {
+  dashboard: 'Dashboard',
+  add: 'Add Activity',
+  edit: 'Edit Activity',
+  search: 'Search',
+  import: 'Import Excel',
+  export: 'Export Excel',
+}
+
 interface ResultsPopupState {
   title: string
   description: string
@@ -32,6 +41,7 @@ interface ResultsPopupState {
 }
 
 const SIDEBAR_EXPANDED_STORAGE_KEY = 'daily-activities-tracker:sidebar-expanded'
+const MOBILE_NAV_MEDIA_QUERY = '(max-width: 768px)'
 const DELETE_RESTRICTED_MESSAGE = 'Only Super Admin users can delete activities.'
 const IMPORT_RESTRICTED_MESSAGE = 'Only Super Admin users can access Excel import.'
 
@@ -64,6 +74,14 @@ function App() {
   const [showAccountSettings, setShowAccountSettings] = useState(false)
   const [showSuperAdminPanel, setShowSuperAdminPanel] = useState(false)
   const [resultsPopup, setResultsPopup] = useState<ResultsPopupState | null>(null)
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+
+    return window.matchMedia(MOBILE_NAV_MEDIA_QUERY).matches
+  })
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
     if (typeof window === 'undefined') {
       return false
@@ -81,6 +99,7 @@ function App() {
       setShowAccountSettings(false)
       setShowSuperAdminPanel(false)
       setResultsPopup(null)
+      setIsMobileSidebarOpen(false)
       return
     }
 
@@ -119,16 +138,65 @@ function App() {
   }, [isSidebarExpanded])
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const mediaQuery = window.matchMedia(MOBILE_NAV_MEDIA_QUERY)
+    const handleViewportChange = (matches: boolean) => {
+      setIsMobileViewport(matches)
+
+      if (!matches) {
+        setIsMobileSidebarOpen(false)
+      }
+    }
+
+    handleViewportChange(mediaQuery.matches)
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      handleViewportChange(event.matches)
+    }
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+
+    mediaQuery.addListener(handleChange)
+    return () => mediaQuery.removeListener(handleChange)
+  }, [])
+
+  useEffect(() => {
+    if (!isMobileViewport || !isMobileSidebarOpen || typeof window === 'undefined') {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMobileSidebarOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isMobileSidebarOpen, isMobileViewport])
+
+  useEffect(() => {
     if (typeof document === 'undefined') {
       return
     }
 
     document.body.classList.toggle('app-shell-active', Boolean(currentUser))
+    document.body.classList.toggle(
+      'mobile-nav-open',
+      Boolean(currentUser) && isMobileViewport && isMobileSidebarOpen
+    )
 
     return () => {
       document.body.classList.remove('app-shell-active')
+      document.body.classList.remove('mobile-nav-open')
     }
-  }, [currentUser])
+  }, [currentUser, isMobileSidebarOpen, isMobileViewport])
 
   const isSuperAdmin = currentUser?.role === 'superadmin'
 
@@ -270,6 +338,7 @@ function App() {
 
   const handleViewChange = (view: AppView) => {
     setResultsPopup(null)
+    setIsMobileSidebarOpen(false)
 
     if (view === 'import' && !isSuperAdmin) {
       setMessage({ type: 'error', text: IMPORT_RESTRICTED_MESSAGE })
@@ -311,6 +380,7 @@ function App() {
 
   const latestSearchActivities = activities.slice(0, 10)
   const searchResultsPopupState = buildSearchResultsPopup(filteredActivities)
+  const currentViewLabel = APP_VIEW_LABELS[currentView]
 
   return (
     <div className={`app-layout ${isSidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
@@ -319,15 +389,63 @@ function App() {
         currentView={currentView}
         onViewChange={handleViewChange}
         isExpanded={isSidebarExpanded}
+        isMobileViewport={isMobileViewport}
+        isMobileOpen={isMobileSidebarOpen}
         onToggleExpand={() => setIsSidebarExpanded((current) => !current)}
-        onSettingsClick={() => setShowAccountSettings(true)}
-        onAdminClick={() => setShowSuperAdminPanel(true)}
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
+        onSettingsClick={() => {
+          setIsMobileSidebarOpen(false)
+          setShowAccountSettings(true)
+        }}
+        onAdminClick={() => {
+          setIsMobileSidebarOpen(false)
+          setShowSuperAdminPanel(true)
+        }}
         onLogout={handleLogout}
       />
+
+      {isMobileViewport && isMobileSidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          onClick={() => setIsMobileSidebarOpen(false)}
+          aria-label="Close navigation menu"
+        />
+      )}
 
       <div className="main-content">
         <div className="main-content-shell">
           <div className="header">
+            <div className="app-toolbar">
+              <button
+                type="button"
+                className="app-toolbar-button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                aria-label="Open navigation menu"
+                aria-controls="primary-sidebar"
+                aria-expanded={isMobileSidebarOpen}
+              >
+                Menu
+              </button>
+
+              <div className="app-toolbar-copy">
+                <div className="app-toolbar-brand">
+                  {settings.logo_url && (
+                    <img
+                      src={settings.logo_url}
+                      alt="App Logo"
+                      className="app-toolbar-logo"
+                      onError={() => {}}
+                    />
+                  )}
+                  <span className="app-toolbar-label">{settings.webapp_name}</span>
+                </div>
+                <strong>{currentViewLabel}</strong>
+              </div>
+
+              <span className="app-toolbar-badge">{currentViewLabel}</span>
+            </div>
+
             <div className="header-content">
               <div className="header-logo-section">
                 {settings.logo_url && (

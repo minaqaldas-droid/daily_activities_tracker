@@ -6,7 +6,10 @@ interface SidebarProps {
   currentView: 'dashboard' | 'add' | 'edit' | 'search' | 'import' | 'export'
   onViewChange: (view: 'dashboard' | 'add' | 'edit' | 'search' | 'import' | 'export') => void
   isExpanded: boolean
+  isMobileViewport: boolean
+  isMobileOpen: boolean
   onToggleExpand: () => void
+  onMobileClose: () => void
   onSettingsClick: () => void
   onAdminClick: () => void
   onLogout: () => void
@@ -31,7 +34,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   onViewChange,
   isExpanded,
+  isMobileViewport,
+  isMobileOpen,
   onToggleExpand,
+  onMobileClose,
   onSettingsClick,
   onAdminClick,
   onLogout,
@@ -44,10 +50,66 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const showAvatarImage = Boolean(currentUser.avatar_url && !isAvatarBroken)
   const userInitial = currentUser.name.trim().charAt(0).toUpperCase() || 'U'
-  const toggleLabel = isExpanded ? 'Collapse sidebar' : 'Expand sidebar'
+  const toggleLabel = isMobileViewport
+    ? 'Close menu'
+    : isExpanded
+      ? 'Collapse sidebar'
+      : 'Expand sidebar'
+
+  const handleViewSelect = (view: NavView) => {
+    onViewChange(view)
+
+    if (isMobileViewport) {
+      onMobileClose()
+    }
+  }
+
+  const handleSettingsSelect = () => {
+    onSettingsClick()
+
+    if (isMobileViewport) {
+      onMobileClose()
+    }
+  }
+
+  const handleAdminSelect = () => {
+    onAdminClick()
+
+    if (isMobileViewport) {
+      onMobileClose()
+    }
+  }
+
+  const handleLogoutSelect = () => {
+    if (isMobileViewport) {
+      onMobileClose()
+    }
+
+    onLogout()
+  }
 
   return (
-    <aside className={`sidebar ${isExpanded ? 'expanded' : 'collapsed'}`} aria-label="Primary navigation">
+    <aside
+      id="primary-sidebar"
+      className={`sidebar ${isExpanded ? 'expanded' : 'collapsed'} ${isMobileOpen ? 'mobile-visible' : ''}`}
+      aria-label="Primary navigation"
+      aria-hidden={isMobileViewport ? !isMobileOpen : undefined}
+    >
+      <div className="sidebar-mobile-topbar">
+        <div className="sidebar-mobile-copy">
+          <span className="sidebar-mobile-kicker">Navigation</span>
+          <strong>{currentUser.role === 'superadmin' ? 'Superadmin Menu' : 'Workspace Menu'}</strong>
+        </div>
+        <button
+          type="button"
+          className="sidebar-mobile-close"
+          onClick={onMobileClose}
+          aria-label="Close navigation menu"
+        >
+          Close
+        </button>
+      </div>
+
       <div
         className="sidebar-header"
         title={`${currentUser.name} (${currentUser.email})${currentUser.role === 'superadmin' ? ' - Superadmin' : ''}`}
@@ -69,12 +131,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <button
         type="button"
         className="sidebar-toggle-btn"
-        onClick={onToggleExpand}
+        onClick={isMobileViewport ? onMobileClose : onToggleExpand}
         title={toggleLabel}
         aria-label={toggleLabel}
       >
         <span className="nav-icon" aria-hidden="true">
-          ⇆
+          {isMobileViewport ? 'X' : '<>'}
         </span>
         <span className="nav-text">{toggleLabel}</span>
       </button>
@@ -87,9 +149,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={item.view}
               type="button"
               className={`nav-item ${currentView === item.view ? 'active' : ''}`}
-              onClick={() => onViewChange(item.view)}
+              onClick={() => handleViewSelect(item.view)}
               title={item.label}
               aria-label={item.label}
+              aria-current={currentView === item.view ? 'page' : undefined}
             >
               <span className="nav-icon" aria-hidden="true">
                 {item.icon}
@@ -108,7 +171,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className={`nav-item ${currentView === item.view ? 'active' : ''} ${
                 item.view === 'import' && currentUser.role !== 'superadmin' ? 'restricted' : ''
               }`}
-              onClick={() => onViewChange(item.view)}
+              onClick={() => handleViewSelect(item.view)}
               title={
                 item.view === 'import' && currentUser.role !== 'superadmin'
                   ? `${item.label} (Super Admin only)`
@@ -119,6 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ? `${item.label} (Super Admin only)`
                   : item.label
               }
+              aria-current={currentView === item.view ? 'page' : undefined}
             >
               <span className="nav-icon" aria-hidden="true">
                 {item.icon}
@@ -137,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               className="nav-item"
-              onClick={onAdminClick}
+              onClick={handleAdminSelect}
               title="Admin Settings"
               aria-label="Admin Settings"
             >
@@ -150,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             className="nav-item"
-            onClick={onSettingsClick}
+            onClick={handleSettingsSelect}
             title="Account Settings"
             aria-label="Account Settings"
           >
@@ -166,7 +230,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           type="button"
           className="logout-btn"
-          onClick={onLogout}
+          onClick={handleLogoutSelect}
           title="Logout"
           aria-label="Logout"
         >
