@@ -77,7 +77,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
   return (
     <form onSubmit={handleSearch} className="search-filter">
       <div className="search-header">
-        <h3>Search & Filter Activities</h3>
+        <h3>🔍 Search & Filter Activities</h3>
         <p>Combine keyword, date, and activity details to quickly narrow down results.</p>
       </div>
 

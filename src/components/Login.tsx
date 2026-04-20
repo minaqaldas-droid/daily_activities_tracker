@@ -78,7 +78,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp }) => {
       <div className="auth-card">
         <h1>Daily Activities Tracker</h1>
         <p className="auth-subtitle">
-          {isLogin ? 'Sign in with your Supabase account' : 'Create a new account'}
+          {isLogin ? 'Sign in with your account' : 'Create a new account'}
         </p>
 
         {message && <div className={message.type === 'error' ? 'error-message' : 'success-message'}>{message.text}</div>}

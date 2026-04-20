@@ -483,7 +483,7 @@ function App() {
 
             {currentView === 'add' && (
               <div className="form-section">
-                <h2>Add New Activity</h2>
+                <h2>➕ Add New Activity</h2>
                 <ActivityForm
                   onSubmit={handleAddOrUpdateActivity}
                   isLoading={isLoading}
@@ -496,7 +496,7 @@ function App() {
             {currentView === 'edit' && editingId && editingData ? (
               <>
                 <div className="form-section">
-                  <h2>Edit Activity</h2>
+                  <h2>📝 Edit Activity</h2>
                   <ActivityForm
                     onSubmit={handleAddOrUpdateActivity}
                     initialData={editingData}
@@ -510,7 +510,7 @@ function App() {
                 </div>
 
                 <div className="list-section">
-                  <h2>Latest 10 Activities</h2>
+                  <h2>📋 Latest 10 Activities</h2>
                   <ActivityList
                     activities={activities.slice(0, 10)}
                     onEdit={handleEditActivity}
@@ -566,7 +566,7 @@ function App() {
                   </div>
                 ) : (
                   <div className="list-section">
-                    <h2>Latest 10 Activities</h2>
+                    <h2>📋 Latest 10 Activities</h2>
                     <ActivityList
                       activities={latestSearchActivities}
                       onEdit={handleEditActivity}
