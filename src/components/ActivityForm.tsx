@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { SYSTEM_OPTIONS } from '../constants/systems'
 import { type Activity, getUsers } from '../supabaseClient'
+import { buildCommentWithPrefixes, parseCommentPrefixes } from '../utils/comments'
 
 interface ActivityFormProps {
   onSubmit: (activity: Activity) => Promise<void>
@@ -41,15 +42,20 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
   const [usersList, setUsersList] = useState<Array<{ id: string; name: string; email: string }>>([])
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [performerIsOther, setPerformerIsOther] = useState(false)
+  const [isMocActivity, setIsMocActivity] = useState(false)
+  const [otherPerformerName, setOtherPerformerName] = useState('')
 
   useEffect(() => {
     if (initialData) {
+      const parsedComment = parseCommentPrefixes(initialData.comments)
       setFormData({
         ...initialData,
         activityType: initialData.activityType ?? '',
-        comments: initialData.comments ?? '',
+        comments: parsedComment.commentBody,
       })
       setPerformerIsOther(initialData.performer === 'Other')
+      setIsMocActivity(parsedComment.hasMoc)
+      setOtherPerformerName(parsedComment.otherPerformerName)
       return
     }
 
@@ -59,6 +65,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     }
 
     setPerformerIsOther(nextFormData.performer === 'Other')
+    setIsMocActivity(false)
+    setOtherPerformerName('')
     setFormData(nextFormData)
   }, [currentUserName, initialData, performerMode])
 
@@ -104,12 +112,15 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
   const handleReset = () => {
     if (initialData) {
+      const parsedComment = parseCommentPrefixes(initialData.comments)
       setFormData({
         ...initialData,
         activityType: initialData.activityType ?? '',
-        comments: initialData.comments ?? '',
+        comments: parsedComment.commentBody,
       })
       setPerformerIsOther(initialData.performer === 'Other')
+      setIsMocActivity(parsedComment.hasMoc)
+      setOtherPerformerName(parsedComment.otherPerformerName)
       return
     }
 
@@ -119,6 +130,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     }
 
     setPerformerIsOther(false)
+    setIsMocActivity(false)
+    setOtherPerformerName('')
     setFormData(nextFormData)
   }
 
@@ -131,7 +144,16 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await onSubmit(formData)
+    const prefixedComments = buildCommentWithPrefixes({
+      comment: formData.comments,
+      hasMoc: isMocActivity,
+      otherPerformerName: performerIsOther ? otherPerformerName : '',
+    })
+
+    await onSubmit({
+      ...formData,
+      comments: prefixedComments,
+    })
 
     if (!initialData) {
       handleReset()
@@ -183,6 +205,23 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
                 <option value="Other">Other</option>
               </select>
               <small className="form-hint">Select a team member or choose "Other".</small>
+              {performerIsOther && (
+                <div style={{ marginTop: '10px' }}>
+                  <label htmlFor="otherPerformerName">Other Performer Name *</label>
+                  <input
+                    type="text"
+                    id="otherPerformerName"
+                    name="otherPerformerName"
+                    value={otherPerformerName}
+                    onChange={(e) => setOtherPerformerName(e.target.value)}
+                    placeholder="Enter performer name"
+                    required
+                  />
+                  <small className="form-hint">
+                    The entered name will be added to comments as <code>[Name]</code>.
+                  </small>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -270,6 +309,20 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
           placeholder="Describe the action taken"
           required
         />
+      </div>
+
+      <div className="form-group">
+        <label className="checkbox-inline">
+          <input
+            type="checkbox"
+            checked={isMocActivity}
+            onChange={(event) => setIsMocActivity(event.target.checked)}
+          />
+          <span>MOC Activity</span>
+        </label>
+        <small className="form-hint">
+          When checked, comments are prefixed with <code>{'{MOC}'}</code>.
+        </small>
       </div>
 
       <div className="form-group">

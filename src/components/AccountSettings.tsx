@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { type User, updateUserDetails } from '../supabaseClient'
+import { type User, updateUserDetails, uploadUserPhoto } from '../supabaseClient'
 
 interface AccountSettingsProps {
   user: User
@@ -17,6 +17,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [name, setName] = useState(user.name)
   const [email, setEmail] = useState(user.email)
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url || '')
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(user.avatar_url || null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [newPassword, setNewPassword] = useState('')
@@ -29,6 +30,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
     setName(user.name)
     setEmail(user.email)
     setAvatarUrl(user.avatar_url || '')
+    setAvatarFile(null)
     setPreviewUrl(user.avatar_url || null)
     setUploadProgress(0)
     setNewPassword('')
@@ -36,6 +38,16 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
     setError('')
     setSuccess('')
   }, [user])
+
+  useEffect(() => {
+    if (!previewUrl || !previewUrl.startsWith('blob:')) {
+      return
+    }
+
+    return () => {
+      URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const handleAvatarFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -57,27 +69,16 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
     setError('')
     setUploadProgress(0)
 
-    const reader = new FileReader()
-    reader.onprogress = (event) => {
-      if (event.lengthComputable) {
-        setUploadProgress(Math.round((event.loaded / event.total) * 100))
-      }
-    }
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string
-      setAvatarUrl(dataUrl)
-      setPreviewUrl(dataUrl)
-      setUploadProgress(100)
-      window.setTimeout(() => setUploadProgress(0), 1000)
-    }
-    reader.onerror = () => {
-      setError('Failed to read file.')
-    }
-    reader.readAsDataURL(file)
+    const objectUrl = URL.createObjectURL(file)
+    setAvatarFile(file)
+    setPreviewUrl(objectUrl)
+    setUploadProgress(100)
+    window.setTimeout(() => setUploadProgress(0), 1000)
   }
 
   const handleRemoveAvatar = () => {
     setAvatarUrl('')
+    setAvatarFile(null)
     setPreviewUrl(null)
     setUploadProgress(0)
     setError('')
@@ -100,12 +101,19 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
 
     try {
       setIsSubmitting(true)
+      let nextAvatarUrl = avatarUrl
+
+      if (avatarFile) {
+        setUploadProgress(30)
+        nextAvatarUrl = await uploadUserPhoto(user.id, avatarFile)
+        setUploadProgress(100)
+      }
 
       const result = await updateUserDetails(user.id, {
         name,
         email,
         password: newPassword || undefined,
-        avatarUrl,
+        avatarUrl: nextAvatarUrl,
       })
 
       onUpdateSuccess(result.user)
@@ -117,6 +125,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
       )
       setNewPassword('')
       setConfirmPassword('')
+      setAvatarFile(null)
 
       setTimeout(onClose, 2000)
     } catch (err) {

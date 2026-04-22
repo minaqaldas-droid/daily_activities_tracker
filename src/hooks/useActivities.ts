@@ -66,7 +66,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
         if (options.editingId) {
           const updateData = {
             date: activity.date,
-            performer: options.editingData?.performer || activity.performer,
+            performer: activity.performer,
             system: activity.system,
             activityType: activity.activityType,
             tag: activity.tag,

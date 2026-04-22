@@ -4,7 +4,7 @@ import {
   getActivityTypeLabel,
   getActivityTypeShortLabel,
 } from '../constants/activityTypes'
-import { Activity } from '../supabaseClient'
+import { type Activity } from '../supabaseClient'
 import { formatDateForDisplay } from '../utils/date'
 
 interface ActivityListProps {
@@ -12,7 +12,9 @@ interface ActivityListProps {
   onEdit: (activity: Activity) => void
   onDelete: (id: string) => Promise<void>
   isLoading?: boolean
+  canEdit?: boolean
   canDelete?: boolean
+  onEditDenied?: () => void
   onDeleteDenied?: () => void
   emptyMessage?: string
 }
@@ -22,7 +24,9 @@ export const ActivityList: React.FC<ActivityListProps> = ({
   onEdit,
   onDelete,
   isLoading = false,
+  canEdit = true,
   canDelete = true,
+  onEditDenied,
   onDeleteDenied,
   emptyMessage = 'No activities recorded yet. Start by adding your first activity!',
 }) => {
@@ -39,8 +43,20 @@ export const ActivityList: React.FC<ActivityListProps> = ({
     }
   }
 
+  const handleEdit = (activity: Activity) => {
+    if (!canEdit) {
+      onEditDenied?.()
+      return
+    }
+
+    onEdit(activity)
+  }
+
   const toggleExpand = (id: string | undefined) => {
-    if (!id) return
+    if (!id) {
+      return
+    }
+
     setExpandedId(expandedId === id ? null : id)
   }
 
@@ -111,13 +127,13 @@ export const ActivityList: React.FC<ActivityListProps> = ({
                     <div className="activity-action-buttons">
                       <button
                         type="button"
-                        className="activity-action-button edit"
+                        className={`activity-action-button ${canEdit ? 'edit' : 'restricted'}`}
                         onClick={(e) => {
                           e.stopPropagation()
-                          onEdit(activity)
+                          handleEdit(activity)
                         }}
                         disabled={isLoading}
-                        title="Edit activity"
+                        title={canEdit ? 'Edit activity' : 'Only Admin users can edit activities'}
                       >
                         ✏️
                       </button>
@@ -131,11 +147,7 @@ export const ActivityList: React.FC<ActivityListProps> = ({
                           }
                         }}
                         disabled={isLoading}
-                        title={
-                          canDelete
-                            ? 'Delete activity'
-                            : 'Only Super Admin users can delete activities'
-                        }
+                        title={canDelete ? 'Delete activity' : 'Only Admin users can delete activities'}
                       >
                         🗑️
                       </button>

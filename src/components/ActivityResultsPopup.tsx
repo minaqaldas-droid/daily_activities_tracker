@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { type Activity } from '../supabaseClient'
 import { exportActivitiesToExcel } from '../utils/excel'
 import { ActivityList } from './ActivityList'
@@ -13,10 +13,34 @@ interface ActivityResultsPopupProps {
   onEdit: (activity: Activity) => void
   onDelete: (id: string) => Promise<void>
   isLoading?: boolean
+  canEdit?: boolean
   canDelete?: boolean
+  onEditDenied?: () => void
   onDeleteDenied?: () => void
   onExportSuccess?: (message: string) => void
   onExportError?: (message: string) => void
+}
+
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
+
+function matchesKeyword(activity: Activity, keyword: string) {
+  if (!keyword.trim()) {
+    return true
+  }
+
+  const normalizedKeyword = keyword.toLowerCase()
+
+  return [
+    activity.date,
+    activity.performer,
+    activity.system,
+    activity.activityType || '',
+    activity.tag,
+    activity.problem,
+    activity.action,
+    activity.comments || '',
+    activity.editedBy || '',
+  ].some((value) => String(value).toLowerCase().includes(normalizedKeyword))
 }
 
 export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
@@ -29,12 +53,27 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
   onEdit,
   onDelete,
   isLoading = false,
+  canEdit = true,
   canDelete = true,
+  onEditDenied,
   onDeleteDenied,
   onExportSuccess,
   onExportError,
 }) => {
   const [isExporting, setIsExporting] = useState(false)
+  const [keyword, setKeyword] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(20)
+
+  const filteredActivities = useMemo(
+    () => activities.filter((activity) => matchesKeyword(activity, keyword)),
+    [activities, keyword]
+  )
+
+  const totalPages = Math.max(1, Math.ceil(filteredActivities.length / pageSize))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const startIndex = (safeCurrentPage - 1) * pageSize
+  const pagedActivities = filteredActivities.slice(startIndex, startIndex + pageSize)
 
   if (!isOpen) {
     return null
@@ -43,10 +82,12 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
   const handleExport = async () => {
     try {
       setIsExporting(true)
-      const filename = await exportActivitiesToExcel(activities, {
+      const filename = await exportActivitiesToExcel(filteredActivities, {
         filename: exportFilename || `${title.replace(/\s+/g, '_')}.xlsx`,
       })
-      onExportSuccess?.(`Exported ${activities.length} activit${activities.length === 1 ? 'y' : 'ies'} to ${filename}.`)
+      onExportSuccess?.(
+        `Exported ${filteredActivities.length} activit${filteredActivities.length === 1 ? 'y' : 'ies'} to ${filename}.`
+      )
     } catch (error) {
       onExportError?.(error instanceof Error ? error.message : 'Failed to export activities.')
     } finally {
@@ -77,14 +118,44 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
 
         <div className="results-popup-toolbar">
           <span className="results-popup-count">
-            {activities.length} activit{activities.length === 1 ? 'y' : 'ies'}
+            {filteredActivities.length} activit{filteredActivities.length === 1 ? 'y' : 'ies'}
           </span>
+
+          <input
+            type="text"
+            className="results-popup-search"
+            placeholder="Search results..."
+            value={keyword}
+            onChange={(event) => {
+              setKeyword(event.target.value)
+              setCurrentPage(1)
+            }}
+            disabled={isLoading || isExporting}
+          />
+
+          <label className="results-popup-page-size">
+            Rows
+            <select
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value) as (typeof PAGE_SIZE_OPTIONS)[number])
+                setCurrentPage(1)
+              }}
+              disabled={isLoading || isExporting}
+            >
+              {PAGE_SIZE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => void handleExport()}
-            disabled={isLoading || isExporting || activities.length === 0}
+            disabled={isLoading || isExporting || filteredActivities.length === 0}
           >
             {isExporting ? 'Exporting...' : 'Export to Excel'}
           </button>
@@ -92,14 +163,38 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
 
         <div className="results-popup-body">
           <ActivityList
-            activities={activities}
+            activities={pagedActivities}
             onEdit={onEdit}
             onDelete={onDelete}
             isLoading={isLoading || isExporting}
+            canEdit={canEdit}
             canDelete={canDelete}
+            onEditDenied={onEditDenied}
             onDeleteDenied={onDeleteDenied}
             emptyMessage="No activities found for this view."
           />
+
+          <div className="results-popup-pagination">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={safeCurrentPage === 1 || isLoading || isExporting}
+            >
+              Previous
+            </button>
+            <span>
+              Page {safeCurrentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={safeCurrentPage >= totalPages || isLoading || isExporting}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>

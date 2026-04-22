@@ -46,7 +46,7 @@ export interface User {
   id: string
   email: string
   name: string
-  role: 'user' | 'superadmin'
+  role: 'user' | 'admin'
   avatar_url?: string
   created_at?: string
 }
@@ -55,8 +55,16 @@ export interface Settings {
   id?: string
   webapp_name: string
   logo_url: string
+  browser_tab_name?: string
+  favicon_url?: string
   primary_color?: string
   performer_mode?: 'manual' | 'auto'
+  header_font_family?: string
+  header_font_size?: string
+  subheader_font_family?: string
+  subheader_font_size?: string
+  sidebar_font_family?: string
+  sidebar_font_size?: string
   updated_at?: string
   updated_by?: string
 }
@@ -95,15 +103,38 @@ type UserProfileRow = {
   id: string
   email: string
   name: string
-  role: 'user' | 'superadmin' | null
+  role: 'user' | 'admin' | 'superadmin' | null
+  avatar_url?: string | null
   created_at?: string
+}
+
+export interface AdminManagedUser {
+  id: string
+  email: string
+  name: string
+  role: 'user' | 'admin'
+  created_at?: string
+}
+
+interface UpdateManagedUserInput {
+  email?: string
+  name?: string
+  role?: 'user' | 'admin'
 }
 
 const DEFAULT_SETTINGS: Settings = {
   webapp_name: 'Daily Activities Tracker',
   logo_url: '',
+  browser_tab_name: 'Daily Activities Tracker',
+  favicon_url: '',
   primary_color: '#667eea',
   performer_mode: 'manual',
+  header_font_family: '',
+  header_font_size: '2.5rem',
+  subheader_font_family: '',
+  subheader_font_size: '1.5rem',
+  sidebar_font_family: '',
+  sidebar_font_size: '0.95rem',
 }
 
 function getMetadataAvatar(authUser: SupabaseAuthUser) {
@@ -116,12 +147,25 @@ function getMetadataAvatar(authUser: SupabaseAuthUser) {
 }
 
 function normalizeUserProfile(profile: UserProfileRow, avatarUrl?: string): User {
+  const normalizedRole = profile.role === 'admin' || profile.role === 'superadmin' ? 'admin' : 'user'
+  const normalizedAvatar = (avatarUrl || profile.avatar_url || '').trim()
+
   return {
     id: profile.id,
     email: profile.email,
     name: profile.name,
-    role: profile.role === 'superadmin' ? 'superadmin' : 'user',
-    avatar_url: avatarUrl || undefined,
+    role: normalizedRole,
+    avatar_url: normalizedAvatar || undefined,
+    created_at: profile.created_at,
+  }
+}
+
+function normalizeManagedUser(profile: UserProfileRow): AdminManagedUser {
+  return {
+    id: profile.id,
+    email: profile.email,
+    name: profile.name,
+    role: profile.role === 'admin' || profile.role === 'superadmin' ? 'admin' : 'user',
     created_at: profile.created_at,
   }
 }
@@ -158,7 +202,7 @@ function getProfileSyncErrorMessage(error: unknown) {
 async function getUserProfileById(userId: string) {
   const { data, error } = await supabase
     .from('users')
-    .select('id, email, name, role, created_at')
+    .select('id, email, name, role, avatar_url, created_at')
     .eq('id', userId)
     .maybeSingle<UserProfileRow>()
 
@@ -179,11 +223,12 @@ async function upsertUserProfile(profile: User) {
           email: profile.email,
           name: profile.name,
           role: profile.role,
+          avatar_url: profile.avatar_url || '',
         },
       ],
       { onConflict: 'id' }
     )
-    .select('id, email, name, role, created_at')
+    .select('id, email, name, role, avatar_url, created_at')
     .single<UserProfileRow>()
 
   if (error) {
@@ -209,7 +254,8 @@ async function syncUserProfile(authUser: SupabaseAuthUser) {
     existingProfile &&
     existingProfile.email === desiredProfile.email &&
     existingProfile.name === desiredProfile.name &&
-    existingProfile.role === desiredProfile.role
+    existingProfile.role === desiredProfile.role &&
+    (existingProfile.avatar_url || '') === (desiredProfile.avatar_url || '')
   ) {
     return {
       ...existingProfile,
@@ -273,9 +319,13 @@ export async function getCurrentUserProfile() {
 export function subscribeToAuthChanges(callback: (user: User | null) => void) {
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-    if (!session?.user) {
+  } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+    if (event === 'SIGNED_OUT') {
       callback(null)
+      return
+    }
+
+    if (!session?.user) {
       return
     }
 
@@ -283,7 +333,6 @@ export function subscribeToAuthChanges(callback: (user: User | null) => void) {
       .then((profile) => callback(profile))
       .catch((error) => {
         console.error('Error syncing auth state:', error)
-        callback(null)
       })
   })
 
@@ -428,7 +477,7 @@ export async function login(email: string, password: string) {
 
 export async function logout() {
   try {
-    const { error } = await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
 
     if (error) throw error
   } catch (error) {
@@ -516,9 +565,10 @@ export async function updateUserDetails(userId: string, details: UpdateUserDetai
       .update({
         name: trimmedName,
         email: emailForProfile,
+        avatar_url: trimmedAvatarUrl,
       })
       .eq('id', userId)
-      .select('id, email, name, role, created_at')
+      .select('id, email, name, role, avatar_url, created_at')
       .single<UserProfileRow>()
 
     if (profileError) throw profileError
@@ -597,18 +647,129 @@ export async function updateSettings(settings: Partial<Settings>, userId: string
   }
 }
 
-export async function getSuperadminUsers() {
+export async function getAdminUsers() {
   try {
     const { data, error } = await supabase
       .from('users')
       .select('id, email, name')
-      .eq('role', 'superadmin')
+      .in('role', ['admin', 'superadmin'])
       .order('name', { ascending: true })
 
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching superadmin users:', error)
+    console.error('Error fetching admin users:', error)
+    throw error
+  }
+}
+
+function sanitizeFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-')
+}
+
+export async function uploadUserPhoto(userId: string, file: File) {
+  const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() || 'png' : 'png'
+  const filePath = `${userId}/${Date.now()}-${sanitizeFileName(file.name || `photo.${extension}`)}`
+
+  const { error } = await supabase.storage.from('user-photos').upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: true,
+    contentType: file.type || undefined,
+  })
+
+  if (error) {
+    throw error
+  }
+
+  const { data } = supabase.storage.from('user-photos').getPublicUrl(filePath)
+  return data.publicUrl
+}
+
+export async function getUsersCount() {
+  const { count, error } = await supabase.from('users').select('id', { count: 'exact', head: true })
+
+  if (error) {
+    throw error
+  }
+
+  return count || 0
+}
+
+export async function getManagedUsers() {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email, name, role, created_at')
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  return (data || []).map((user) => normalizeManagedUser(user as UserProfileRow))
+}
+
+export async function createManagedUser(input: {
+  id: string
+  email: string
+  name: string
+  role: 'user' | 'admin'
+}) {
+  const { data, error } = await supabase
+    .from('users')
+    .upsert(
+      [
+        {
+          id: input.id,
+          email: input.email.trim(),
+          name: input.name.trim(),
+          role: input.role,
+        },
+      ],
+      { onConflict: 'id' }
+    )
+    .select('id, email, name, role, created_at')
+    .single<UserProfileRow>()
+
+  if (error) {
+    throw error
+  }
+
+  return normalizeManagedUser(data)
+}
+
+export async function updateManagedUser(userId: string, input: UpdateManagedUserInput) {
+  const payload: UpdateManagedUserInput = {}
+
+  if (typeof input.email === 'string') {
+    payload.email = input.email.trim()
+  }
+
+  if (typeof input.name === 'string') {
+    payload.name = input.name.trim()
+  }
+
+  if (input.role) {
+    payload.role = input.role
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .update(payload)
+    .eq('id', userId)
+    .select('id, email, name, role, created_at')
+    .single<UserProfileRow>()
+
+  if (error) {
+    throw error
+  }
+
+  return normalizeManagedUser(data)
+}
+
+export async function deleteManagedUser(userId: string) {
+  const { error } = await supabase.from('users').delete().eq('id', userId)
+
+  if (error) {
     throw error
   }
 }

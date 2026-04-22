@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
-import { Activity } from '../supabaseClient'
+import { type Activity, getUsersCount } from '../supabaseClient'
 import { ActivityList } from './ActivityList'
 
 export interface DashboardActivityRequest {
@@ -16,7 +16,9 @@ interface DashboardProps {
   onEdit?: (activity: Activity) => void
   onDelete?: (id: string) => Promise<void>
   isLoading?: boolean
+  canEdit?: boolean
   canDelete?: boolean
+  onEditDenied?: () => void
   onDeleteDenied?: () => void
   onOpenActivityResults?: (request: DashboardActivityRequest) => void
 }
@@ -31,7 +33,7 @@ interface DashboardStats {
   activityBySystem: Map<string, number>
   activityByType: Map<string, number>
   recentActivities: Activity[]
-  todayActivities: number
+  teamMembersCount: number
   thisWeekActivities: number
 }
 
@@ -250,7 +252,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onEdit,
   onDelete,
   isLoading = false,
+  canEdit = true,
   canDelete = true,
+  onEditDenied,
   onDeleteDenied,
   onOpenActivityResults,
 }) => {
@@ -264,9 +268,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
     activityBySystem: new Map<string, number>(),
     activityByType: new Map<string, number>(),
     recentActivities: [],
-    todayActivities: 0,
+    teamMembersCount: 0,
     thisWeekActivities: 0,
   })
+
+  useEffect(() => {
+    let isMounted = true
+
+    void getUsersCount()
+      .then((count) => {
+        if (!isMounted) {
+          return
+        }
+
+        setStats((previous) => ({
+          ...previous,
+          teamMembersCount: count,
+        }))
+      })
+      .catch((error) => {
+        console.error('Failed to load users count:', error)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const activityByPerformer = new Map<string, number>()
@@ -274,10 +301,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const activityBySystem = new Map<string, number>()
     const activityByType = new Map<string, number>()
 
-    const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    let todayCount = 0
     let weekCount = 0
 
     activities.forEach((activity) => {
@@ -285,10 +310,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
       activityByTag.set(activity.tag, (activityByTag.get(activity.tag) || 0) + 1)
       activityBySystem.set(activity.system, (activityBySystem.get(activity.system) || 0) + 1)
       activityByType.set(activity.activityType || '', (activityByType.get(activity.activityType || '') || 0) + 1)
-
-      if (activity.date === today) {
-        todayCount += 1
-      }
 
       if (activity.date >= weekAgo) {
         weekCount += 1
@@ -298,7 +319,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const myActivities = activities.filter((activity) => activity.performer === performerName).length
     const recentActivities = activities.slice(0, 5)
 
-    setStats({
+    setStats((current) => ({
       totalActivities: activities.length,
       myActivities,
       uniqueTags: activityByTag.size,
@@ -308,15 +329,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
       activityBySystem,
       activityByType,
       recentActivities,
-      todayActivities: todayCount,
+      teamMembersCount: current.teamMembersCount,
       thisWeekActivities: weekCount,
-    })
+    }))
   }, [activities, performerName])
 
   const systemChartData = createChartData(stats.activityBySystem)
   const performerChartData = createChartData(stats.activityByPerformer)
   const activityTypeChartData = createActivityTypeChartData(stats.activityByType)
-  const tagChartData = createChartData(stats.activityByTag).slice(0, 10)
+  const tagChartData = createChartData(stats.activityByTag).slice(0, 20)
   const myActivitiesList = activities.filter((activity) => activity.performer === performerName)
   const activitiesWithSystems = activities.filter((activity) => Boolean(activity.system))
   const activitiesWithTags = activities.filter((activity) => Boolean(activity.tag))
@@ -520,7 +541,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="stat-icon">👥</div>
           <div className="stat-content">
             <h3>Team Members</h3>
-            <p className="stat-value">{stats.activityByPerformer.size}</p>
+            <p className="stat-value">{stats.teamMembersCount}</p>
           </div>
         </div>
 
@@ -598,7 +619,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
             onEdit={onEdit}
             onDelete={onDelete}
             isLoading={isLoading}
+            canEdit={canEdit}
             canDelete={canDelete}
+            onEditDenied={onEditDenied}
             onDeleteDenied={onDeleteDenied}
           />
         </div>

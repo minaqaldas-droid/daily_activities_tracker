@@ -7,7 +7,7 @@ import { Dashboard, type DashboardActivityRequest } from './components/Dashboard
 import { Login } from './components/Login'
 import { SearchFilter } from './components/SearchFilter'
 import { Sidebar } from './components/Sidebar'
-import { SuperAdminPanel } from './components/SuperAdminPanel'
+import { AdminPanel } from './components/SuperAdminPanel'
 import { useActivities } from './hooks/useActivities'
 import { useAuth } from './hooks/useAuth'
 import { useSettings } from './hooks/useSettings'
@@ -42,8 +42,10 @@ interface ResultsPopupState {
 
 const SIDEBAR_EXPANDED_STORAGE_KEY = 'daily-activities-tracker:sidebar-expanded'
 const MOBILE_NAV_MEDIA_QUERY = '(max-width: 768px)'
-const DELETE_RESTRICTED_MESSAGE = 'Only Super Admin users can delete activities.'
-const IMPORT_RESTRICTED_MESSAGE = 'Only Super Admin users can access Excel import.'
+const EDIT_RESTRICTED_MESSAGE = 'Only Admin users can edit activities.'
+const DELETE_RESTRICTED_MESSAGE = 'Only Admin users can delete activities.'
+const IMPORT_RESTRICTED_MESSAGE = 'Only Admin users can access Excel import.'
+const ADD_RESTRICTED_MESSAGE = 'Only Admin users can add activities.'
 
 function hasSearchFilters(filters: SearchFilters) {
   return Object.values(filters).some((value) => Boolean(value))
@@ -72,7 +74,7 @@ function App() {
   const [editingData, setEditingData] = useState<Activity | undefined>(undefined)
   const [currentView, setCurrentView] = useState<AppView>('dashboard')
   const [showAccountSettings, setShowAccountSettings] = useState(false)
-  const [showSuperAdminPanel, setShowSuperAdminPanel] = useState(false)
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [resultsPopup, setResultsPopup] = useState<ResultsPopupState | null>(null)
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === 'undefined') {
@@ -97,7 +99,7 @@ function App() {
       setEditingData(undefined)
       setCurrentView('dashboard')
       setShowAccountSettings(false)
-      setShowSuperAdminPanel(false)
+      setShowAdminPanel(false)
       setResultsPopup(null)
       setIsMobileSidebarOpen(false)
       return
@@ -198,7 +200,7 @@ function App() {
     }
   }, [currentUser, isMobileSidebarOpen, isMobileViewport])
 
-  const isSuperAdmin = currentUser?.role === 'superadmin'
+  const isAdmin = currentUser?.role === 'admin'
 
   const buildSearchResultsPopup = (sourceActivities: Activity[]): ResultsPopupState => ({
     title: '🔎 Search Results',
@@ -250,6 +252,11 @@ function App() {
   }
 
   const handleEditActivity = (activity: Activity) => {
+    if (!isAdmin) {
+      setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })
+      return
+    }
+
     setResultsPopup(null)
     setEditingId(activity.id || null)
     setEditingData(activity)
@@ -258,7 +265,7 @@ function App() {
   }
 
   const handleDeleteActivity = async (id: string) => {
-    if (!isSuperAdmin) {
+    if (!isAdmin) {
       setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })
       return
     }
@@ -340,8 +347,18 @@ function App() {
     setResultsPopup(null)
     setIsMobileSidebarOpen(false)
 
-    if (view === 'import' && !isSuperAdmin) {
+    if (view === 'import' && !isAdmin) {
       setMessage({ type: 'error', text: IMPORT_RESTRICTED_MESSAGE })
+      return
+    }
+
+    if (view === 'add' && !isAdmin) {
+      setMessage({ type: 'error', text: ADD_RESTRICTED_MESSAGE })
+      return
+    }
+
+    if (view === 'edit' && !isAdmin) {
+      setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })
       return
     }
 
@@ -399,7 +416,7 @@ function App() {
         }}
         onAdminClick={() => {
           setIsMobileSidebarOpen(false)
-          setShowSuperAdminPanel(true)
+          setShowAdminPanel(true)
         }}
         onLogout={handleLogout}
       />
@@ -474,7 +491,9 @@ function App() {
                   onEdit={handleEditActivity}
                   onDelete={handleDeleteActivity}
                   isLoading={isLoading}
-                  canDelete={isSuperAdmin}
+                  canEdit={isAdmin}
+                  canDelete={isAdmin}
+                  onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
                   onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
                   onOpenActivityResults={handleOpenDashboardResults}
                 />
@@ -516,7 +535,9 @@ function App() {
                     onEdit={handleEditActivity}
                     onDelete={handleDeleteActivity}
                     isLoading={isLoading}
-                    canDelete={isSuperAdmin}
+                    canEdit={isAdmin}
+                    canDelete={isAdmin}
+                    onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
                     onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
                   />
                 </div>
@@ -572,26 +593,28 @@ function App() {
                       onEdit={handleEditActivity}
                       onDelete={handleDeleteActivity}
                       isLoading={isLoading}
-                      canDelete={isSuperAdmin}
-                      onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
-                      emptyMessage="No activities available yet."
-                    />
+                    canEdit={isAdmin}
+                    canDelete={isAdmin}
+                    onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
+                    onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
+                    emptyMessage="No activities available yet."
+                  />
                   </div>
                 )}
               </>
             )}
 
-            {currentView === 'import' && !isSuperAdmin && (
+            {currentView === 'import' && !isAdmin && (
               <div className="form-section permission-notice">
                 <h2>Excel Import Restricted</h2>
-                <p>Only Super Admin users can import activities from Excel files.</p>
+                <p>Only Admin users can import activities from Excel files.</p>
                 <button className="btn btn-secondary" onClick={() => setCurrentView('dashboard')}>
                   Back to Dashboard
                 </button>
               </div>
             )}
 
-            {currentView === 'import' && isSuperAdmin && (
+            {currentView === 'import' && isAdmin && (
               <Suspense
                 fallback={
                   <div className="form-section">
@@ -646,11 +669,11 @@ function App() {
           />
         )}
 
-        {showSuperAdminPanel && currentUser.role === 'superadmin' && (
-          <SuperAdminPanel
+        {showAdminPanel && currentUser.role === 'admin' && (
+          <AdminPanel
             user={currentUser}
             currentSettings={settings}
-            onClose={() => setShowSuperAdminPanel(false)}
+            onClose={() => setShowAdminPanel(false)}
             onSettingsUpdate={handleSettingsUpdate}
             isLoading={isLoading}
           />
@@ -666,7 +689,9 @@ function App() {
           onEdit={handleEditActivity}
           onDelete={handleDeleteActivity}
           isLoading={isLoading}
-          canDelete={isSuperAdmin}
+          canEdit={isAdmin}
+          canDelete={isAdmin}
+          onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
           onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
           onExportSuccess={(text) => setMessage({ type: 'success', text })}
           onExportError={(text) =>

@@ -4,8 +4,16 @@ import { type Settings, getSettings } from '../supabaseClient'
 const DEFAULT_SETTINGS: Settings = {
   webapp_name: 'Daily Activities Tracker',
   logo_url: '',
+  browser_tab_name: 'Daily Activities Tracker',
+  favicon_url: '',
   primary_color: '#667eea',
   performer_mode: 'manual',
+  header_font_family: '',
+  header_font_size: '2.5rem',
+  subheader_font_family: '',
+  subheader_font_size: '1.5rem',
+  sidebar_font_family: '',
+  sidebar_font_size: '0.95rem',
 }
 
 const DEFAULT_FAVICON_PATH = '/favicon.svg'
@@ -177,12 +185,16 @@ export function useSettings(isEnabled: boolean) {
   }, [settings.primary_color])
 
   useEffect(() => {
-    document.title = settings.webapp_name?.trim() || DEFAULT_SETTINGS.webapp_name
-  }, [settings.webapp_name])
+    document.title =
+      settings.browser_tab_name?.trim() ||
+      settings.webapp_name?.trim() ||
+      DEFAULT_SETTINGS.browser_tab_name ||
+      DEFAULT_SETTINGS.webapp_name
+  }, [settings.browser_tab_name, settings.webapp_name])
 
   useEffect(() => {
     const faviconLink = ensureFaviconLink()
-    const faviconHref = settings.logo_url?.trim() || DEFAULT_FAVICON_PATH
+    const faviconHref = settings.favicon_url?.trim() || settings.logo_url?.trim() || DEFAULT_FAVICON_PATH
 
     faviconLink.href = faviconHref
 
@@ -192,7 +204,25 @@ export function useSettings(isEnabled: boolean) {
     }
 
     faviconLink.removeAttribute('type')
-  }, [settings.logo_url])
+  }, [settings.favicon_url, settings.logo_url])
+
+  useEffect(() => {
+    const root = document.documentElement
+
+    root.style.setProperty('--font-header-family', settings.header_font_family?.trim() || 'inherit')
+    root.style.setProperty('--font-subheader-family', settings.subheader_font_family?.trim() || 'inherit')
+    root.style.setProperty('--font-sidebar-family', settings.sidebar_font_family?.trim() || 'inherit')
+    root.style.setProperty('--font-header-size', settings.header_font_size?.trim() || '2.5rem')
+    root.style.setProperty('--font-subheader-size', settings.subheader_font_size?.trim() || '1.5rem')
+    root.style.setProperty('--font-sidebar-size', settings.sidebar_font_size?.trim() || '0.95rem')
+  }, [
+    settings.header_font_family,
+    settings.header_font_size,
+    settings.subheader_font_family,
+    settings.subheader_font_size,
+    settings.sidebar_font_family,
+    settings.sidebar_font_size,
+  ])
 
   return {
     settings,
