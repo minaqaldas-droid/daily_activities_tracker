@@ -29,7 +29,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [logoUrl, setLogoUrl] = useState('')
   const [browserTabName, setBrowserTabName] = useState('')
   const [faviconUrl, setFaviconUrl] = useState('')
-  const [primaryColor, setPrimaryColor] = useState('#667eea')
   const [performerMode, setPerformerMode] = useState<'manual' | 'auto'>('manual')
   const [headerFontFamily, setHeaderFontFamily] = useState('')
   const [headerFontSize, setHeaderFontSize] = useState('2.5rem')
@@ -55,7 +54,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLogoUrl(currentSettings.logo_url || '')
     setBrowserTabName(currentSettings.browser_tab_name || currentSettings.webapp_name || 'Daily Activities Tracker')
     setFaviconUrl(currentSettings.favicon_url || '')
-    setPrimaryColor(currentSettings.primary_color || '#667eea')
     setPerformerMode(currentSettings.performer_mode || 'manual')
     setHeaderFontFamily(currentSettings.header_font_family || '')
     setHeaderFontSize(currentSettings.header_font_size || '2.5rem')
@@ -114,7 +112,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           logo_url: logoUrl.trim(),
           browser_tab_name: browserTabName.trim(),
           favicon_url: faviconUrl.trim(),
-          primary_color: primaryColor,
           performer_mode: performerMode,
           header_font_family: headerFontFamily.trim(),
           header_font_size: headerFontSize.trim(),
@@ -265,27 +262,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               placeholder="https://example.com/favicon.png"
               disabled={isSubmitting || isLoading}
             />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="primary-color">Primary Color</label>
-            <div className="color-input-group">
-              <input
-                id="primary-color"
-                type="color"
-                value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
-                disabled={isSubmitting || isLoading}
-              />
-              <input
-                type="text"
-                value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
-                placeholder="#667eea"
-                disabled={isSubmitting || isLoading}
-                className="color-hex-input"
-              />
-            </div>
           </div>
 
           <div className="form-group">

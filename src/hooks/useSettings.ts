@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: Settings = {
 const DEFAULT_FAVICON_PATH = '/favicon.svg'
 const FAVICON_LINK_ID = 'app-favicon'
 const DEFAULT_PRIMARY_COLOR = DEFAULT_SETTINGS.primary_color || '#667eea'
+const USER_PRIMARY_COLOR_STORAGE_KEY = 'daily-activities-tracker:user-primary-color'
 
 type RgbColor = {
   r: number
@@ -158,6 +159,13 @@ function getThemeTokens(primaryColor: string) {
 
 export function useSettings(isEnabled: boolean) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
+  const [userPrimaryColor, setUserPrimaryColor] = useState(() => {
+    if (typeof window === 'undefined') {
+      return ''
+    }
+
+    return window.localStorage.getItem(USER_PRIMARY_COLOR_STORAGE_KEY) || ''
+  })
 
   const loadSettings = useCallback(async () => {
     const appSettings = await getSettings()
@@ -168,6 +176,7 @@ export function useSettings(isEnabled: boolean) {
   useEffect(() => {
     if (!isEnabled) {
       setSettings(DEFAULT_SETTINGS)
+      setUserPrimaryColor('')
       return
     }
 
@@ -177,12 +186,13 @@ export function useSettings(isEnabled: boolean) {
   }, [isEnabled, loadSettings])
 
   useEffect(() => {
-    const themeTokens = getThemeTokens(settings.primary_color || DEFAULT_PRIMARY_COLOR)
+    const effectivePrimaryColor = userPrimaryColor || settings.primary_color || DEFAULT_PRIMARY_COLOR
+    const themeTokens = getThemeTokens(effectivePrimaryColor)
 
     Object.entries(themeTokens).forEach(([token, value]) => {
       document.documentElement.style.setProperty(token, value)
     })
-  }, [settings.primary_color])
+  }, [settings.primary_color, userPrimaryColor])
 
   useEffect(() => {
     document.title =
@@ -224,9 +234,25 @@ export function useSettings(isEnabled: boolean) {
     settings.sidebar_font_size,
   ])
 
+  const setPreferredPrimaryColor = useCallback((color: string) => {
+    const trimmedColor = color.trim()
+    const normalizedColor = normalizeHexColor(trimmedColor)
+
+    setUserPrimaryColor(normalizedColor)
+    window.localStorage.setItem(USER_PRIMARY_COLOR_STORAGE_KEY, normalizedColor)
+  }, [])
+
+  const clearPreferredPrimaryColor = useCallback(() => {
+    setUserPrimaryColor('')
+    window.localStorage.removeItem(USER_PRIMARY_COLOR_STORAGE_KEY)
+  }, [])
+
   return {
     settings,
     setSettings,
     loadSettings,
+    effectivePrimaryColor: userPrimaryColor || settings.primary_color || DEFAULT_PRIMARY_COLOR,
+    setPreferredPrimaryColor,
+    clearPreferredPrimaryColor,
   }
 }

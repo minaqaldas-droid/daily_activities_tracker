@@ -86,7 +86,7 @@ export const ActivityList: React.FC<ActivityListProps> = ({
         <tbody>
           {activities.map((activity) => {
             const isExpanded = expandedId === activity.id
-            const hasExpandableDetails = Boolean(activity.comments || activity.editedBy)
+            const hasExpandableDetails = Boolean(activity.comments)
 
             return (
               <React.Fragment key={activity.id}>
@@ -162,12 +162,6 @@ export const ActivityList: React.FC<ActivityListProps> = ({
                           <div className="expanded-section">
                             <strong>Comments</strong>
                             <p>{activity.comments}</p>
-                          </div>
-                        )}
-                        {activity.editedBy && (
-                          <div className="expanded-section">
-                            <strong>Edited By</strong>
-                            <p>{activity.editedBy}</p>
                           </div>
                         )}
                       </div>

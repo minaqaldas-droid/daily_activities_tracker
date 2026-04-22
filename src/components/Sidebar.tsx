@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { type User } from '../supabaseClient'
 
 interface SidebarProps {
@@ -8,7 +8,8 @@ interface SidebarProps {
   isExpanded: boolean
   isMobileViewport: boolean
   isMobileOpen: boolean
-  onToggleExpand: () => void
+  onHoverExtend: () => void
+  onHoverLeave: () => void
   onMobileClose: () => void
   onSettingsClick: () => void
   onAdminClick: () => void
@@ -36,7 +37,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isExpanded,
   isMobileViewport,
   isMobileOpen,
-  onToggleExpand,
+  onHoverExtend,
+  onHoverLeave,
   onMobileClose,
   onSettingsClick,
   onAdminClick,
@@ -44,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const isAdmin = currentUser.role === 'admin'
   const [isAvatarBroken, setIsAvatarBroken] = useState(false)
+  const hoverExpandTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     setIsAvatarBroken(false)
@@ -51,8 +54,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const showAvatarImage = Boolean(currentUser.avatar_url && !isAvatarBroken)
   const userInitial = currentUser.name.trim().charAt(0).toUpperCase() || 'U'
-  const toggleLabel = isMobileViewport ? 'Close menu' : isExpanded ? 'Collapse sidebar' : 'Expand sidebar'
-
   const handleViewSelect = (view: NavView) => {
     onViewChange(view)
 
@@ -85,12 +86,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onLogout()
   }
 
+  const startHoverExpandTimer = () => {
+    if (isMobileViewport || isExpanded) {
+      return
+    }
+
+    if (hoverExpandTimerRef.current) {
+      window.clearTimeout(hoverExpandTimerRef.current)
+    }
+
+    hoverExpandTimerRef.current = window.setTimeout(() => {
+      onHoverExtend()
+      hoverExpandTimerRef.current = null
+    }, 3000)
+  }
+
+  const clearHoverExpandTimer = () => {
+    if (hoverExpandTimerRef.current) {
+      window.clearTimeout(hoverExpandTimerRef.current)
+      hoverExpandTimerRef.current = null
+    }
+  }
+
+  const handleSidebarMouseLeave = () => {
+    clearHoverExpandTimer()
+
+    if (!isMobileViewport) {
+      onHoverLeave()
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      clearHoverExpandTimer()
+    }
+  }, [])
+
   return (
     <aside
       id="primary-sidebar"
       className={`sidebar ${isExpanded ? 'expanded' : 'collapsed'} ${isMobileOpen ? 'mobile-visible' : ''}`}
       aria-label="Primary navigation"
       aria-hidden={isMobileViewport ? !isMobileOpen : undefined}
+      onMouseEnter={startHoverExpandTimer}
+      onMouseLeave={handleSidebarMouseLeave}
     >
       <div className="sidebar-mobile-topbar">
         <div className="sidebar-mobile-copy">
@@ -115,19 +154,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isAdmin && <span className="user-role">🔐 ADMIN</span>}
         </div>
       </div>
-
-      <button
-        type="button"
-        className="sidebar-toggle-btn"
-        onClick={isMobileViewport ? onMobileClose : onToggleExpand}
-        title={toggleLabel}
-        aria-label={toggleLabel}
-      >
-        <span className="nav-icon" aria-hidden="true">
-          {isMobileViewport ? 'X' : '<>'}
-        </span>
-        <span className="nav-text">{toggleLabel}</span>
-      </button>
 
       <nav className="sidebar-nav">
         <div className="nav-section">

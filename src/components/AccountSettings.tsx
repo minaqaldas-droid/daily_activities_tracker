@@ -6,6 +6,8 @@ interface AccountSettingsProps {
   onUpdateSuccess: (user: User) => void
   onClose: () => void
   isLoading?: boolean
+  currentPrimaryColor: string
+  onPrimaryColorChange: (color: string) => void
 }
 
 export const AccountSettings: React.FC<AccountSettingsProps> = ({
@@ -13,6 +15,8 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   onUpdateSuccess,
   onClose,
   isLoading = false,
+  currentPrimaryColor,
+  onPrimaryColorChange,
 }) => {
   const [name, setName] = useState(user.name)
   const [email, setEmail] = useState(user.email)
@@ -22,6 +26,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [primaryColor, setPrimaryColor] = useState(currentPrimaryColor || '#667eea')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -35,9 +40,10 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
     setUploadProgress(0)
     setNewPassword('')
     setConfirmPassword('')
+    setPrimaryColor(currentPrimaryColor || '#667eea')
     setError('')
     setSuccess('')
-  }, [user])
+  }, [user, currentPrimaryColor])
 
   useEffect(() => {
     if (!previewUrl || !previewUrl.startsWith('blob:')) {
@@ -115,6 +121,8 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
         password: newPassword || undefined,
         avatarUrl: nextAvatarUrl,
       })
+
+      onPrimaryColorChange(primaryColor)
 
       onUpdateSuccess(result.user)
 
@@ -228,10 +236,34 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           <hr style={{ margin: '20px 0', border: 'none', borderTop: '1px solid #ddd' }} />
 
           <div className="form-group">
+            <label htmlFor="primaryColor">Primary Color</label>
+            <div className="color-input-group">
+              <input
+                id="primaryColor"
+                type="color"
+                value={primaryColor}
+                onChange={(event) => setPrimaryColor(event.target.value)}
+                disabled={isSubmitting || isLoading}
+              />
+              <input
+                type="text"
+                value={primaryColor}
+                onChange={(event) => setPrimaryColor(event.target.value)}
+                placeholder="#667eea"
+                disabled={isSubmitting || isLoading}
+                className="color-hex-input"
+              />
+            </div>
+            <small className="form-hint">Applies to your own app theme.</small>
+          </div>
+
+          <div className="form-group">
             <label htmlFor="newPassword">New Password</label>
             <input
               type="password"
               id="newPassword"
+              name="newPassword"
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Leave blank to keep your current password"
@@ -244,6 +276,8 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
             <input
               type="password"
               id="confirmPassword"
+              name="confirmPassword"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm new password"

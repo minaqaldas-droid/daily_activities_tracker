@@ -161,7 +161,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="activity-form-compact">
       <div className="form-row form-row-two-up">
         <div className="form-group">
           <label htmlFor="date">Date *</label>
@@ -274,7 +274,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
         </div>
       </div>
 
-      <div className="form-group">
+      <div className="form-row form-row-two-up">
+        <div className="form-group">
           <label htmlFor="tag">Tag *</label>
           <input
             type="text"
@@ -287,42 +288,46 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
           />
         </div>
 
-      <div className="form-group">
-        <label htmlFor="problem">Problem *</label>
-        <textarea
-          id="problem"
-          name="problem"
-          value={formData.problem}
-          onChange={handleChange}
-          placeholder="Describe the problem encountered"
-          required
-        />
+        <div className="form-group form-group-inline-checkbox">
+          <label>&nbsp;</label>
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={isMocActivity}
+              onChange={(event) => setIsMocActivity(event.target.checked)}
+            />
+            <span>MOC Activity</span>
+          </label>
+          <small className="form-hint">
+            When checked, comments are prefixed with <code>{'{MOC}'}</code>.
+          </small>
+        </div>
       </div>
 
-      <div className="form-group">
-        <label htmlFor="action">Action Taken *</label>
-        <textarea
-          id="action"
-          name="action"
-          value={formData.action}
-          onChange={handleChange}
-          placeholder="Describe the action taken"
-          required
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={isMocActivity}
-            onChange={(event) => setIsMocActivity(event.target.checked)}
+      <div className="form-row form-row-two-up">
+        <div className="form-group">
+          <label htmlFor="problem">Problem *</label>
+          <textarea
+            id="problem"
+            name="problem"
+            value={formData.problem}
+            onChange={handleChange}
+            placeholder="Describe the problem encountered"
+            required
           />
-          <span>MOC Activity</span>
-        </label>
-        <small className="form-hint">
-          When checked, comments are prefixed with <code>{'{MOC}'}</code>.
-        </small>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="action">Action Taken *</label>
+          <textarea
+            id="action"
+            name="action"
+            value={formData.action}
+            onChange={handleChange}
+            placeholder="Describe the action taken"
+            required
+          />
+        </div>
       </div>
 
       <div className="form-group">

@@ -5212,6 +5212,28 @@ body {
   opacity: 1;
 }
 
+.activity-form-compact .form-group {
+  margin-bottom: 10px;
+}
+
+.activity-form-compact .form-group textarea {
+  min-height: 64px;
+}
+
+.activity-form-compact .form-actions {
+  margin-top: 4px;
+}
+
+.form-group-inline-checkbox {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.form-group-inline-checkbox > label:first-child {
+  margin-bottom: 0;
+}
+
 /* Admin Enhancements */
 :root {
   --font-header-family: inherit;

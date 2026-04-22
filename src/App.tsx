@@ -40,7 +40,6 @@ interface ResultsPopupState {
   exportFilename: string
 }
 
-const SIDEBAR_EXPANDED_STORAGE_KEY = 'daily-activities-tracker:sidebar-expanded'
 const MOBILE_NAV_MEDIA_QUERY = '(max-width: 768px)'
 const EDIT_RESTRICTED_MESSAGE = 'Only Admin users can edit activities.'
 const DELETE_RESTRICTED_MESSAGE = 'Only Admin users can delete activities.'
@@ -53,7 +52,7 @@ function hasSearchFilters(filters: SearchFilters) {
 
 function App() {
   const { currentUser, isAuthLoading, login, signUp, logout, setCurrentUser } = useAuth()
-  const { settings, setSettings } = useSettings(Boolean(currentUser))
+  const { settings, setSettings, effectivePrimaryColor, setPreferredPrimaryColor } = useSettings(Boolean(currentUser))
   const {
     activities,
     filteredActivities,
@@ -84,13 +83,7 @@ function App() {
     return window.matchMedia(MOBILE_NAV_MEDIA_QUERY).matches
   })
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false
-    }
-
-    return window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY) === 'true'
-  })
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -134,10 +127,6 @@ function App() {
     const timer = window.setTimeout(() => setMessage(null), 3000)
     return () => window.clearTimeout(timer)
   }, [message])
-
-  useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, String(isSidebarExpanded))
-  }, [isSidebarExpanded])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -343,6 +332,18 @@ function App() {
     })
   }
 
+  const handleSidebarHoverExtend = () => {
+    if (!isMobileViewport) {
+      setIsSidebarExpanded(true)
+    }
+  }
+
+  const handleSidebarHoverLeave = () => {
+    if (!isMobileViewport) {
+      setIsSidebarExpanded(false)
+    }
+  }
+
   const handleViewChange = (view: AppView) => {
     setResultsPopup(null)
     setIsMobileSidebarOpen(false)
@@ -408,7 +409,8 @@ function App() {
         isExpanded={isSidebarExpanded}
         isMobileViewport={isMobileViewport}
         isMobileOpen={isMobileSidebarOpen}
-        onToggleExpand={() => setIsSidebarExpanded((current) => !current)}
+        onHoverExtend={handleSidebarHoverExtend}
+        onHoverLeave={handleSidebarHoverLeave}
         onMobileClose={() => setIsMobileSidebarOpen(false)}
         onSettingsClick={() => {
           setIsMobileSidebarOpen(false)
@@ -666,6 +668,8 @@ function App() {
             onUpdateSuccess={handleUpdateUser}
             onClose={() => setShowAccountSettings(false)}
             isLoading={isLoading}
+            currentPrimaryColor={effectivePrimaryColor}
+            onPrimaryColorChange={setPreferredPrimaryColor}
           />
         )}
 
