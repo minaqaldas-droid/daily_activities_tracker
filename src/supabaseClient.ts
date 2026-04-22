@@ -50,6 +50,8 @@ export interface User {
   avatar_url?: string
   preferred_primary_color?: string
   permissions?: FeaturePermissions
+  is_approved?: boolean
+  approved_at?: string | null
   created_at?: string
 }
 
@@ -110,6 +112,8 @@ type UserProfileRow = {
   avatar_url?: string | null
   preferred_primary_color?: string | null
   permissions?: Partial<FeaturePermissions> | null
+  is_approved?: boolean | null
+  approved_at?: string | null
   created_at?: string
 }
 
@@ -131,6 +135,8 @@ export interface AdminManagedUser {
   name: string
   role: 'user' | 'admin'
   permissions: FeaturePermissions
+  is_approved: boolean
+  approved_at?: string | null
   created_at?: string
 }
 
@@ -139,6 +145,7 @@ interface UpdateManagedUserInput {
   name?: string
   role?: 'user' | 'admin'
   permissions?: FeaturePermissions
+  isApproved?: boolean
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -217,6 +224,7 @@ function normalizeUserProfile(profile: UserProfileRow, avatarUrl?: string): User
   const normalizedAvatar = (avatarUrl || profile.avatar_url || '').trim()
   const normalizedPrimaryColor = (profile.preferred_primary_color || '').trim()
   const normalizedPermissions = normalizePermissions(profile.permissions, normalizedRole)
+  const isApproved = profile.is_approved !== false
 
   return {
     id: profile.id,
@@ -226,6 +234,8 @@ function normalizeUserProfile(profile: UserProfileRow, avatarUrl?: string): User
     avatar_url: normalizedAvatar || undefined,
     preferred_primary_color: normalizedPrimaryColor || undefined,
     permissions: normalizedPermissions,
+    is_approved: isApproved,
+    approved_at: profile.approved_at ?? null,
     created_at: profile.created_at,
   }
 }
@@ -238,6 +248,8 @@ function normalizeManagedUser(profile: UserProfileRow): AdminManagedUser {
     name: profile.name,
     role: normalizedRole,
     permissions: normalizePermissions(profile.permissions, normalizedRole),
+    is_approved: profile.is_approved !== false,
+    approved_at: profile.approved_at ?? null,
     created_at: profile.created_at,
   }
 }
@@ -271,10 +283,41 @@ function getProfileSyncErrorMessage(error: unknown) {
   return rawMessage
 }
 
+function getPendingApprovalMessage() {
+  return 'Your account is pending Admin approval. Please contact an Admin.'
+}
+
+async function notifyAdminAboutSignup(payload: { id: string; email: string; name: string }) {
+  const webhookUrl = (import.meta.env.VITE_ADMIN_APPROVAL_WEBHOOK_URL || '').trim()
+
+  if (!webhookUrl) {
+    return false
+  }
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'new_user_signup',
+        occurred_at: new Date().toISOString(),
+        user: payload,
+      }),
+    })
+
+    return response.ok
+  } catch (error) {
+    console.warn('Failed to notify admin about signup request:', error)
+    return false
+  }
+}
+
 async function getUserProfileById(userId: string) {
   const { data, error } = await supabase
     .from('users')
-    .select('id, email, name, role, avatar_url, preferred_primary_color, permissions, created_at')
+    .select('id, email, name, role, avatar_url, preferred_primary_color, permissions, is_approved, approved_at, created_at')
     .eq('id', userId)
     .maybeSingle<UserProfileRow>()
 
@@ -298,11 +341,13 @@ async function upsertUserProfile(profile: User) {
           avatar_url: profile.avatar_url || '',
           preferred_primary_color: profile.preferred_primary_color || '',
           permissions: normalizePermissions(profile.permissions, profile.role),
+          is_approved: profile.is_approved !== false,
+          approved_at: profile.approved_at ?? null,
         },
       ],
       { onConflict: 'id' }
     )
-    .select('id, email, name, role, avatar_url, preferred_primary_color, permissions, created_at')
+    .select('id, email, name, role, avatar_url, preferred_primary_color, permissions, is_approved, approved_at, created_at')
     .single<UserProfileRow>()
 
   if (error) {
@@ -323,6 +368,8 @@ async function syncUserProfile(authUser: SupabaseAuthUser) {
     avatar_url: metadataAvatar || existingProfile?.avatar_url,
     preferred_primary_color: existingProfile?.preferred_primary_color || '',
     permissions: normalizePermissions(existingProfile?.permissions, existingProfile?.role || 'user'),
+    is_approved: existingProfile?.is_approved ?? true,
+    approved_at: existingProfile?.approved_at ?? null,
     created_at: existingProfile?.created_at,
   }
 
@@ -333,6 +380,7 @@ async function syncUserProfile(authUser: SupabaseAuthUser) {
     existingProfile.role === desiredProfile.role &&
     (existingProfile.avatar_url || '') === (desiredProfile.avatar_url || '') &&
     (existingProfile.preferred_primary_color || '') === (desiredProfile.preferred_primary_color || '') &&
+    existingProfile.is_approved === desiredProfile.is_approved &&
     JSON.stringify(normalizePermissions(existingProfile.permissions, existingProfile.role)) ===
       JSON.stringify(normalizePermissions(desiredProfile.permissions, desiredProfile.role))
   ) {
@@ -392,7 +440,13 @@ export async function getCurrentUserProfile() {
     return null
   }
 
-  return syncUserProfile(user)
+  const profile = await syncUserProfile(user)
+  if (profile.is_approved === false) {
+    await supabase.auth.signOut({ scope: 'local' })
+    return null
+  }
+
+  return profile
 }
 
 export function subscribeToAuthChanges(callback: (user: User | null) => void) {
@@ -409,7 +463,15 @@ export function subscribeToAuthChanges(callback: (user: User | null) => void) {
     }
 
     void syncUserProfile(session.user)
-      .then((profile) => callback(profile))
+      .then(async (profile) => {
+        if (profile.is_approved === false) {
+          await supabase.auth.signOut({ scope: 'local' })
+          callback(null)
+          return
+        }
+
+        callback(profile)
+      })
       .catch((error) => {
         console.error('Error syncing auth state:', error)
       })
@@ -516,14 +578,32 @@ export async function signUp(email: string, name: string, password: string): Pro
       throw new Error('Unable to create account.')
     }
 
+    const adminNotified = await notifyAdminAboutSignup({
+      id: data.user.id,
+      email: email.trim(),
+      name: name.trim(),
+    })
+    const pendingApprovalMessage = adminNotified
+      ? 'Account created. A confirmation request was sent to Admin for approval.'
+      : 'Account created. Your account is pending Admin approval.'
+
     if (!data.session) {
       return {
         requiresEmailConfirmation: true,
-        message: 'Account created. Check your email to confirm your account, then sign in.',
+        message: pendingApprovalMessage,
       }
     }
 
     const profile = await syncUserProfile(data.user)
+
+    if (profile.is_approved === false) {
+      await supabase.auth.signOut({ scope: 'local' })
+
+      return {
+        requiresEmailConfirmation: true,
+        message: pendingApprovalMessage,
+      }
+    }
 
     return {
       user: profile,
@@ -547,7 +627,14 @@ export async function login(email: string, password: string) {
       throw new Error('Unable to sign in.')
     }
 
-    return syncUserProfile(data.user)
+    const profile = await syncUserProfile(data.user)
+
+    if (profile.is_approved === false) {
+      await supabase.auth.signOut({ scope: 'local' })
+      throw new Error(getPendingApprovalMessage())
+    }
+
+    return profile
   } catch (error) {
     console.error('Error logging in:', error)
     throw error
@@ -649,7 +736,7 @@ export async function updateUserDetails(userId: string, details: UpdateUserDetai
         preferred_primary_color: trimmedPreferredPrimaryColor,
       })
       .eq('id', userId)
-      .select('id, email, name, role, avatar_url, preferred_primary_color, permissions, created_at')
+      .select('id, email, name, role, avatar_url, preferred_primary_color, permissions, is_approved, approved_at, created_at')
       .single<UserProfileRow>()
 
     if (profileError) throw profileError
@@ -779,7 +866,7 @@ export async function getUsersCount() {
 export async function getManagedUsers() {
   const { data, error } = await supabase
     .from('users')
-    .select('id, email, name, role, permissions, created_at')
+    .select('id, email, name, role, permissions, is_approved, approved_at, created_at')
     .order('created_at', { ascending: true })
 
   if (error) {
@@ -812,7 +899,7 @@ export async function createManagedUser(input: {
       ],
       { onConflict: 'id' }
     )
-    .select('id, email, name, role, permissions, created_at')
+    .select('id, email, name, role, permissions, is_approved, approved_at, created_at')
     .single<UserProfileRow>()
 
   if (error) {
@@ -823,7 +910,10 @@ export async function createManagedUser(input: {
 }
 
 export async function updateManagedUser(userId: string, input: UpdateManagedUserInput) {
-  const payload: UpdateManagedUserInput = {}
+  const payload: Record<string, unknown> = {}
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser()
 
   if (typeof input.email === 'string') {
     payload.email = input.email.trim()
@@ -841,11 +931,17 @@ export async function updateManagedUser(userId: string, input: UpdateManagedUser
     payload.permissions = normalizePermissions(input.permissions, input.role || 'user')
   }
 
+  if (typeof input.isApproved === 'boolean') {
+    payload.is_approved = input.isApproved
+    payload.approved_at = input.isApproved ? new Date().toISOString() : null
+    payload.approved_by = input.isApproved ? authUser?.id || null : null
+  }
+
   const { data, error } = await supabase
     .from('users')
     .update(payload)
     .eq('id', userId)
-    .select('id, email, name, role, permissions, created_at')
+    .select('id, email, name, role, permissions, is_approved, approved_at, created_at')
     .single<UserProfileRow>()
 
   if (error) {
@@ -856,7 +952,9 @@ export async function updateManagedUser(userId: string, input: UpdateManagedUser
 }
 
 export async function deleteManagedUser(userId: string) {
-  const { error } = await supabase.from('users').delete().eq('id', userId)
+  const { error } = await supabase.rpc('admin_delete_user', {
+    target_user_id: userId,
+  })
 
   if (error) {
     throw error

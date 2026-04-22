@@ -54,7 +54,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp }) => {
       if (result.requiresEmailConfirmation) {
         setMessage({
           type: 'success',
-          text: result.message || 'Account created. Check your email to confirm your account.',
+          text: result.message || 'Account created. Your account is pending Admin approval.',
         })
         setIsLogin(true)
         setPassword('')

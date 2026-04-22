@@ -5283,7 +5283,9 @@ body {
 .list-section h2,
 .dashboard-section-title,
 .dashboard-title,
-.search-filter h3 {
+.search-filter h3,
+.excel-import-section h3,
+.excel-export-section h3 {
   font-family: var(--font-subheader-family);
   font-size: var(--font-subheader-size);
 }
@@ -5340,18 +5342,33 @@ body {
   font-weight: 600;
 }
 
+.btn-user-management {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);
+  color: #ffffff;
+  border: 1px solid rgba(3, 105, 161, 0.7);
+  box-shadow: 0 10px 20px rgba(14, 165, 233, 0.25);
+}
+
+.btn-user-management:hover {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(14, 165, 233, 0.3);
+}
+
 .user-management-modal {
   width: min(1360px, 95vw);
   max-width: 1360px;
   max-height: 92vh;
   overflow-y: auto;
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 .user-management-modal .form-group,
 .user-management-modal .table-container,
 .user-management-modal .modal-actions {
-  margin-left: 12px;
-  margin-right: 12px;
+  margin-left: 18px;
+  margin-right: 18px;
 }
 
 .rbac-row {

@@ -58,9 +58,6 @@ export const ExcelExport: React.FC<ExcelExportProps> = ({
     <div className="excel-export-container">
       <div className="excel-export-section">
         <h3>Export Activities to Excel</h3>
-        <p className="excel-hint">
-          Download the activities log as an Excel file for backup or further analysis.
-        </p>
 
         <div className="export-options">
           <div className="export-option">

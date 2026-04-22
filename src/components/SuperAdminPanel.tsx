@@ -58,6 +58,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFaviconFile(null)
   }, [currentSettings])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   const handleLogoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
@@ -306,7 +317,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <button type="submit" className="btn btn-primary" disabled={isSubmitting || isLoading}>
               {isSubmitting ? 'Saving...' : 'Save Settings'}
             </button>
-            <button type="button" className="btn btn-secondary" onClick={onOpenUserManagement}>
+            <button type="button" className="btn btn-user-management" onClick={onOpenUserManagement}>
               Open User Management
             </button>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting || isLoading}>

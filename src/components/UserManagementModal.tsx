@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  ADMIN_PERMISSIONS,
-  DEFAULT_USER_PERMISSIONS,
   type AdminManagedUser,
   type FeatureKey,
-  createManagedUser,
   deleteManagedUser,
   getManagedUsers,
   normalizePermissions,
@@ -28,22 +25,21 @@ const FEATURE_LABELS: Array<{ key: FeatureKey; label: string }> = [
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClose }) => {
   const [users, setUsers] = useState<AdminManagedUser[]>([])
+  const [draftUsers, setDraftUsers] = useState<AdminManagedUser[]>([])
+  const [deletedUserIds, setDeletedUserIds] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const [newUserId, setNewUserId] = useState('')
-  const [newUserEmail, setNewUserEmail] = useState('')
-  const [newUserName, setNewUserName] = useState('')
-  const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user')
-
   const loadUsers = async () => {
     try {
       setIsLoading(true)
       const data = await getManagedUsers()
       setUsers(data)
+      setDraftUsers(data)
+      setDeletedUserIds(new Set())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users.')
     } finally {
@@ -55,92 +51,146 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
     void loadUsers()
   }, [])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   const filteredUsers = useMemo(() => {
     if (!search.trim()) {
-      return users
+      return draftUsers
     }
 
     const keyword = search.toLowerCase()
-    return users.filter((item) =>
+    return draftUsers.filter((item) =>
       [item.id, item.email, item.name, item.role].join(' ').toLowerCase().includes(keyword)
     )
-  }, [search, users])
+  }, [search, draftUsers])
 
-  const handleCreate = async () => {
-    setError('')
-    setSuccess('')
-
-    if (!newUserId.trim() || !newUserEmail.trim() || !newUserName.trim()) {
-      setError('ID, Email, and Name are required.')
-      return
+  const hasPendingChanges = useMemo(() => {
+    if (deletedUserIds.size > 0 || users.length !== draftUsers.length) {
+      return true
     }
 
-    try {
-      setIsMutating(true)
-      const permissions = newUserRole === 'admin' ? ADMIN_PERMISSIONS : DEFAULT_USER_PERMISSIONS
-      const created = await createManagedUser({
-        id: newUserId.trim(),
-        email: newUserEmail.trim(),
-        name: newUserName.trim(),
-        role: newUserRole,
-        permissions,
-      })
-      setUsers((previous) => [...previous.filter((item) => item.id !== created.id), created])
-      setSuccess('User profile inserted/updated in database.')
-      setNewUserId('')
-      setNewUserEmail('')
-      setNewUserName('')
-      setNewUserRole('user')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create user.')
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  const handleRoleChange = async (managedUser: AdminManagedUser, role: 'user' | 'admin') => {
-    try {
-      setIsMutating(true)
-      const permissions = normalizePermissions(managedUser.permissions, role)
-      const updated = await updateManagedUser(managedUser.id, { role, permissions })
-      setUsers((previous) => previous.map((item) => (item.id === updated.id ? updated : item)))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update role.')
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  const handlePermissionToggle = async (managedUser: AdminManagedUser, key: FeatureKey, enabled: boolean) => {
-    try {
-      setIsMutating(true)
-      const nextPermissions = {
-        ...managedUser.permissions,
-        [key]: enabled,
+    return draftUsers.some((draftUser) => {
+      const original = users.find((item) => item.id === draftUser.id)
+      if (!original) {
+        return true
       }
-      const updated = await updateManagedUser(managedUser.id, {
-        role: managedUser.role,
-        permissions: nextPermissions,
-      })
-      setUsers((previous) => previous.map((item) => (item.id === updated.id ? updated : item)))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update permissions.')
-    } finally {
-      setIsMutating(false)
-    }
+
+      return (
+        original.role !== draftUser.role ||
+        original.is_approved !== draftUser.is_approved ||
+        JSON.stringify(original.permissions) !== JSON.stringify(draftUser.permissions)
+      )
+    })
+  }, [deletedUserIds, draftUsers, users])
+
+  const handleRoleChange = (managedUser: AdminManagedUser, role: 'user' | 'admin') => {
+    setDraftUsers((previous) =>
+      previous.map((item) =>
+        item.id === managedUser.id
+          ? {
+              ...item,
+              role,
+              permissions: normalizePermissions(item.permissions, role),
+            }
+          : item
+      )
+    )
   }
 
-  const handleDelete = async (managedUser: AdminManagedUser) => {
+  const handlePermissionToggle = (managedUser: AdminManagedUser, key: FeatureKey, enabled: boolean) => {
+    setDraftUsers((previous) =>
+      previous.map((item) =>
+        item.id === managedUser.id
+          ? {
+              ...item,
+              permissions: {
+                ...item.permissions,
+                [key]: enabled,
+              },
+            }
+          : item
+      )
+    )
+  }
+
+  const handleDelete = (managedUser: AdminManagedUser) => {
     if (!confirm(`Delete user profile "${managedUser.name}"?`)) {
       return
     }
 
+    setDraftUsers((previous) => previous.filter((item) => item.id !== managedUser.id))
+    setDeletedUserIds((previous) => {
+      const next = new Set(previous)
+      next.add(managedUser.id)
+      return next
+    })
+  }
+
+  const handleApprovalToggle = (managedUser: AdminManagedUser, isApproved: boolean) => {
+    setDraftUsers((previous) =>
+      previous.map((item) =>
+        item.id === managedUser.id
+          ? {
+              ...item,
+              is_approved: isApproved,
+              approved_at: isApproved ? new Date().toISOString() : null,
+            }
+          : item
+      )
+    )
+  }
+
+  const handleSaveSettings = async () => {
+    setError('')
+    setSuccess('')
+
+    if (!hasPendingChanges) {
+      setSuccess('No pending changes to save.')
+      return
+    }
+
     try {
       setIsMutating(true)
-      await deleteManagedUser(managedUser.id)
-      setUsers((previous) => previous.filter((item) => item.id !== managedUser.id))
+
+      for (const draftUser of draftUsers) {
+        const original = users.find((item) => item.id === draftUser.id)
+        if (!original) {
+          continue
+        }
+
+        const hasChanges =
+          original.role !== draftUser.role ||
+          original.is_approved !== draftUser.is_approved ||
+          JSON.stringify(original.permissions) !== JSON.stringify(draftUser.permissions)
+
+        if (!hasChanges) {
+          continue
+        }
+
+        await updateManagedUser(draftUser.id, {
+          role: draftUser.role,
+          permissions: draftUser.permissions,
+          isApproved: draftUser.is_approved,
+        })
+      }
+
+      for (const deletedUserId of deletedUserIds) {
+        await deleteManagedUser(deletedUserId)
+      }
+
+      await loadUsers()
+      setSuccess('Settings saved successfully.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete user.')
+      setError(err instanceof Error ? err.message : 'Failed to save settings.')
     } finally {
       setIsMutating(false)
     }
@@ -160,50 +210,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
         {success && <div className="success-message">{success}</div>}
 
         <div className="form-group">
-          <label>Create New User (DB Profile)</label>
-          <div className="form-row form-row-two-up">
-            <input
-              type="text"
-              value={newUserId}
-              onChange={(e) => setNewUserId(e.target.value)}
-              placeholder="ID (Auth User UUID)"
-              disabled={isMutating}
-            />
-            <input
-              type="email"
-              value={newUserEmail}
-              onChange={(e) => setNewUserEmail(e.target.value)}
-              placeholder="Email"
-              disabled={isMutating}
-            />
-          </div>
-          <div className="form-row form-row-two-up">
-            <input
-              type="text"
-              value={newUserName}
-              onChange={(e) => setNewUserName(e.target.value)}
-              placeholder="Name"
-              disabled={isMutating}
-            />
-            <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'user' | 'admin')}>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div className="form-row">
-            <button type="button" className="btn btn-primary" onClick={() => void handleCreate()} disabled={isMutating}>
-              Create User
-            </button>
-          </div>
-        </div>
-
-        <div className="form-group">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search users..."
-            disabled={isLoading}
+            disabled={isLoading || isMutating}
           />
         </div>
 
@@ -215,6 +227,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
                 <th>Email</th>
                 <th>Name</th>
                 <th>Role</th>
+                <th>Status</th>
                 <th>Delete</th>
               </tr>
             </thead>
@@ -229,15 +242,25 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
                   <td data-label="Role">
                     <select
                       value={managedUser.role}
-                      onChange={(e) => void handleRoleChange(managedUser, e.target.value as 'user' | 'admin')}
+                      onChange={(e) => handleRoleChange(managedUser, e.target.value as 'user' | 'admin')}
                       disabled={isMutating}
                     >
                       <option value="user">User</option>
                       <option value="admin">Admin</option>
                     </select>
                   </td>
+                  <td data-label="Status">
+                    <button
+                      type="button"
+                      className={`btn ${managedUser.is_approved ? 'btn-secondary' : 'btn-primary'}`}
+                      onClick={() => handleApprovalToggle(managedUser, !managedUser.is_approved)}
+                      disabled={isMutating}
+                    >
+                      {managedUser.is_approved ? 'Approved' : 'Pending'}
+                    </button>
+                  </td>
                   <td data-label="Delete">
-                    <button type="button" className="btn btn-danger" onClick={() => void handleDelete(managedUser)} disabled={isMutating}>
+                    <button type="button" className="btn btn-danger" onClick={() => handleDelete(managedUser)} disabled={isMutating}>
                       Delete
                     </button>
                   </td>
@@ -245,7 +268,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
               ))}
               {!isLoading && filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={5}>No users found.</td>
+                  <td colSpan={6}>No users found.</td>
                 </tr>
               )}
             </tbody>
@@ -268,7 +291,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
                       type="checkbox"
                       checked={Boolean(managedUser.permissions[feature.key])}
                       onChange={(event) =>
-                        void handlePermissionToggle(managedUser, feature.key, event.target.checked)
+                        handlePermissionToggle(managedUser, feature.key, event.target.checked)
                       }
                       disabled={isMutating}
                     />
@@ -278,13 +301,18 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
             </div>
           ))}
           <small className="form-hint">
-            Default user access: Dashboard, Search, Export.
+            New signups stay pending until Admin approval. Default user access after approval: Dashboard, Search, Export.
           </small>
         </div>
 
         <div className="modal-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => void loadUsers()} disabled={isMutating}>
-            Refresh
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void handleSaveSettings()}
+            disabled={isMutating || !hasPendingChanges}
+          >
+            Save Settings
           </button>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Close

@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS public.users (
   avatar_url TEXT NOT NULL DEFAULT '',
   preferred_primary_color TEXT NOT NULL DEFAULT '',
   permissions JSONB NOT NULL DEFAULT '{"dashboard": true, "add": false, "edit": false, "search": true, "import": false, "export": true, "edit_action": false, "delete_action": false}'::jsonb,
+  is_approved BOOLEAN NOT NULL DEFAULT false,
+  approval_requested_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
+  approved_at TIMESTAMPTZ,
+  approved_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
@@ -57,6 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_activities_system ON public.activities(system);
 CREATE INDEX IF NOT EXISTS idx_activities_activity_type ON public.activities("activityType");
 CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
+CREATE INDEX IF NOT EXISTS idx_users_is_approved ON public.users(is_approved);
 
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
@@ -83,6 +88,26 @@ AS $$
   SELECT public.is_admin();
 $$;
 
+CREATE OR REPLACE FUNCTION public.admin_delete_user(target_user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Only Admin users can delete accounts.';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'You cannot delete your own account.';
+  END IF;
+
+  DELETE FROM auth.users
+  WHERE id = target_user_id;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.sync_auth_user_profile()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -100,7 +125,20 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
   SET
     email = EXCLUDED.email,
-    name = COALESCE(NULLIF(EXCLUDED.name, ''), public.users.name);
+    name = COALESCE(NULLIF(EXCLUDED.name, ''), public.users.name),
+    approval_requested_at = COALESCE(public.users.approval_requested_at, timezone('utc', now()));
+
+  UPDATE public.users
+  SET
+    is_approved = false,
+    approved_at = NULL,
+    approved_by = NULL,
+    approval_requested_at = timezone('utc', now())
+  WHERE id = NEW.id
+    AND (
+      TG_OP = 'INSERT'
+      OR (public.users.is_approved IS TRUE AND NEW.confirmed_at IS NULL)
+    );
 
   RETURN NEW;
 END;
