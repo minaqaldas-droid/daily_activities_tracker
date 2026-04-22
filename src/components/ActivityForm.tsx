@@ -204,6 +204,23 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
                 ))}
                 <option value="Other">Other</option>
               </select>
+              {performerIsOther && (
+                <div className="activity-other-performer-inline">
+                  <label htmlFor="otherPerformerName">Other Performer Name *</label>
+                  <input
+                    type="text"
+                    id="otherPerformerName"
+                    name="otherPerformerName"
+                    value={otherPerformerName}
+                    onChange={(e) => setOtherPerformerName(e.target.value)}
+                    placeholder="Enter performer name"
+                    required
+                  />
+                  <small className="form-hint">
+                    Added to comments as <code>[Name]</code>.
+                  </small>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -221,24 +238,6 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
             </>
           )}
         </div>
-
-        {performerMode === 'manual' && performerIsOther && (
-          <div className="form-group activity-other-performer-row">
-            <label htmlFor="otherPerformerName">Other Performer Name *</label>
-            <input
-              type="text"
-              id="otherPerformerName"
-              name="otherPerformerName"
-              value={otherPerformerName}
-              onChange={(e) => setOtherPerformerName(e.target.value)}
-              placeholder="Enter performer name"
-              required
-            />
-            <small className="form-hint">
-              Added to comments as <code>[Name]</code>.
-            </small>
-          </div>
-        )}
 
         <div className="form-group">
           <label htmlFor="system">System *</label>

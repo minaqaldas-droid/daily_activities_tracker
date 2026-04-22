@@ -2201,6 +2201,38 @@ body.modal-open {
   overflow-wrap: anywhere;
 }
 
+.activities-table th.resizable-th {
+  position: relative;
+  padding-right: 18px;
+}
+
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 12px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.column-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.activities-table.resizing-columns,
+.activities-table.resizing-columns * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .activities-table tbody tr {
   border-bottom: 1px solid #e0e0e0;
   transition: background-color 0.2s ease;
@@ -2243,6 +2275,10 @@ body.modal-open {
 
 .col-action {
   width: 200px;
+}
+
+.col-comments {
+  width: 190px;
 }
 
 .col-actions {
@@ -3790,6 +3826,10 @@ body.mobile-nav-open {
     border-bottom: none;
   }
 
+  .column-resize-handle {
+    display: none;
+  }
+
   .col-date,
   .col-performer,
   .col-system,
@@ -3797,6 +3837,7 @@ body.mobile-nav-open {
   .col-tag,
   .col-problem,
   .col-action,
+  .col-comments,
   .col-actions {
     width: auto;
     max-width: none;
@@ -5505,6 +5546,10 @@ body {
 
 .activity-other-performer-row {
   grid-column: 1 / -1;
+}
+
+.activity-other-performer-inline {
+  margin-top: 10px;
 }
 
 @media (max-width: 768px) {
