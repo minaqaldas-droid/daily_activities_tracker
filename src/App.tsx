@@ -179,6 +179,40 @@ function App() {
   }, [isMobileSidebarOpen, isMobileViewport])
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      if (resultsPopup) {
+        setResultsPopup(null)
+        return
+      }
+
+      if (showUserManagement) {
+        setShowUserManagement(false)
+        return
+      }
+
+      if (showAdminPanel) {
+        setShowAdminPanel(false)
+        return
+      }
+
+      if (showAccountSettings) {
+        setShowAccountSettings(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [resultsPopup, showAccountSettings, showAdminPanel, showUserManagement])
+
+  useEffect(() => {
     if (typeof document === 'undefined') {
       return
     }
@@ -194,6 +228,21 @@ function App() {
       document.body.classList.remove('mobile-nav-open')
     }
   }, [currentUser, isMobileSidebarOpen, isMobileViewport])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    const isAnyModalOpen =
+      Boolean(resultsPopup) || showAccountSettings || showAdminPanel || showUserManagement
+
+    document.body.classList.toggle('modal-open', isAnyModalOpen)
+
+    return () => {
+      document.body.classList.remove('modal-open')
+    }
+  }, [resultsPopup, showAccountSettings, showAdminPanel, showUserManagement])
 
   const isAdmin = currentUser?.role === 'admin'
   const canViewDashboard = hasPermission(currentUser, 'dashboard')
@@ -488,7 +537,6 @@ function App() {
                   )}
                   <span className="app-toolbar-label">{settings.webapp_name}</span>
                 </div>
-                <strong>{currentViewLabel}</strong>
               </div>
 
               <span className="app-toolbar-badge">{currentViewLabel}</span>

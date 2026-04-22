@@ -58,17 +58,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFaviconFile(null)
   }, [currentSettings])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
-
   const handleLogoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
@@ -237,7 +226,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onChange={() => setPerformerMode('manual')}
                   disabled={isSubmitting || isLoading}
                 />
-                <span className="radio-label">✍️ Manual Entry</span>
+                <span className="radio-label admin-performer-option-label">
+                  <span className="performer-option-icon" aria-hidden="true">✍️</span>
+                  <span>Manual Entry</span>
+                </span>
               </label>
               <label className="radio-option">
                 <input
@@ -248,7 +240,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onChange={() => setPerformerMode('auto')}
                   disabled={isSubmitting || isLoading}
                 />
-                <span className="radio-label">🔐 Auto-assign</span>
+                <span className="radio-label admin-performer-option-label">
+                  <span className="performer-option-icon" aria-hidden="true">🔒</span>
+                  <span>Auto-assign</span>
+                </span>
               </label>
             </div>
           </div>

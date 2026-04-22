@@ -162,7 +162,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="activity-form-compact">
-      <div className="form-row form-row-three-up">
+      <div className="form-row form-row-three-up activity-main-grid">
         <div className="form-group">
           <label htmlFor="date">Date *</label>
           <input type="date" id="date" name="date" value={formData.date} onChange={handleChange} required />
@@ -204,7 +204,6 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
                 ))}
                 <option value="Other">Other</option>
               </select>
-              <small className="form-hint">Select a team member or choose "Other".</small>
             </>
           ) : (
             <>
@@ -222,22 +221,9 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
             </>
           )}
         </div>
-        <div className="form-group">
-          <label htmlFor="system">System *</label>
-          <select id="system" name="system" value={formData.system} onChange={handleChange} required>
-            <option value="">-- Select System --</option>
-            {SYSTEM_OPTIONS.map((system) => (
-              <option key={system} value={system}>
-                {system}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
 
-      {performerMode === 'manual' && performerIsOther && (
-        <div className="form-row">
-          <div className="form-group">
+        {performerMode === 'manual' && performerIsOther && (
+          <div className="form-group activity-other-performer-row">
             <label htmlFor="otherPerformerName">Other Performer Name *</label>
             <input
               type="text"
@@ -252,10 +238,20 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
               Added to comments as <code>[Name]</code>.
             </small>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="form-row form-row-three-up">
+        <div className="form-group">
+          <label htmlFor="system">System *</label>
+          <select id="system" name="system" value={formData.system} onChange={handleChange} required>
+            <option value="">-- Select System --</option>
+            {SYSTEM_OPTIONS.map((system) => (
+              <option key={system} value={system}>
+                {system}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="form-group">
           <label htmlFor="activityType">Activity Type *</label>
           <select

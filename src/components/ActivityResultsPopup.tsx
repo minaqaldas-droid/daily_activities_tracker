@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { type Activity } from '../supabaseClient'
 import { exportActivitiesToExcel } from '../utils/excel'
 import { ActivityList } from './ActivityList'
@@ -69,21 +69,6 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
     () => activities.filter((activity) => matchesKeyword(activity, keyword)),
     [activities, keyword]
   )
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
 
   const totalPages = Math.max(1, Math.ceil(filteredActivities.length / pageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)

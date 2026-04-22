@@ -27,6 +27,10 @@ body.app-shell-active {
   overflow-x: hidden;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -1091,6 +1095,7 @@ body.app-shell-active {
   align-items: center;
   z-index: 1000;
   padding: 20px;
+  overscroll-behavior: contain;
 }
 
 .results-popup-overlay {
@@ -1108,6 +1113,7 @@ body.app-shell-active {
   animation: slideIn 0.3s ease-out;
   display: flex;
   flex-direction: column;
+  overscroll-behavior: contain;
 }
 
 .results-popup-header {
@@ -1219,6 +1225,7 @@ body.app-shell-active {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   animation: slideIn 0.3s ease-out;
 }
 
@@ -2967,21 +2974,56 @@ body.app-shell-active {
 
 .admin-performer-row {
   flex-direction: row;
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
 }
 
 .admin-performer-row .radio-option {
-  flex: 1;
+  flex: 0 0 calc(50% - 12px);
   align-items: center;
+  justify-content: flex-start;
+  padding: 12px 10px;
+  border-radius: 8px;
+}
+
+.admin-performer-row .radio-option:hover {
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .admin-performer-row .radio-option input[type="radio"] {
   margin-top: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.admin-performer-option-label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.performer-option-icon {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 @media (max-width: 768px) {
   .admin-performer-row {
     flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .admin-performer-row .radio-option {
+    flex-basis: auto;
   }
 }
 
@@ -5272,11 +5314,21 @@ body {
   --font-header-size: 2.5rem;
   --font-subheader-size: 1.5rem;
   --font-sidebar-size: 0.95rem;
+  --font-header-size-fluid: clamp(1rem, calc(0.5rem + 1.8vw), var(--font-header-size));
+  --font-header-size-mobile-fluid: clamp(0.72rem, calc(0.4rem + 1.4vw), var(--font-header-size-fluid));
+  --font-subheader-size-fluid: clamp(0.88rem, calc(0.42rem + 1vw), var(--font-subheader-size));
+  --font-sidebar-size-fluid: clamp(0.72rem, calc(0.46rem + 0.6vw), var(--font-sidebar-size));
 }
 
 .header h1 {
   font-family: var(--font-header-family);
-  font-size: var(--font-header-size);
+  font-size: var(--font-header-size-fluid) !important;
+}
+
+.app-toolbar-label {
+  font-family: var(--font-header-family) !important;
+  font-size: var(--font-header-size-mobile-fluid) !important;
+  line-height: 1.15;
 }
 
 .form-section h2,
@@ -5286,8 +5338,8 @@ body {
 .search-filter h3,
 .excel-import-section h3,
 .excel-export-section h3 {
-  font-family: var(--font-subheader-family);
-  font-size: var(--font-subheader-size);
+  font-family: var(--font-subheader-family) !important;
+  font-size: var(--font-subheader-size-fluid) !important;
 }
 
 .dashboard-title {
@@ -5299,8 +5351,8 @@ body {
 .sidebar-toggle-btn,
 .logout-btn,
 .sidebar-mobile-copy strong {
-  font-family: var(--font-sidebar-family);
-  font-size: var(--font-sidebar-size);
+  font-family: var(--font-sidebar-family) !important;
+  font-size: var(--font-sidebar-size-fluid) !important;
 }
 
 .sidebar {
@@ -5362,6 +5414,7 @@ body {
   overflow-y: auto;
   padding-left: 12px;
   padding-right: 12px;
+  overscroll-behavior: contain;
 }
 
 .user-management-modal .form-group,
@@ -5369,6 +5422,15 @@ body {
 .user-management-modal .modal-actions {
   margin-left: 18px;
   margin-right: 18px;
+}
+
+.user-management-search-group {
+  margin-top: 10px;
+}
+
+.user-management-actions {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
 }
 
 .rbac-row {
@@ -5441,9 +5503,22 @@ body {
   min-width: 0;
 }
 
+.activity-other-performer-row {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 768px) {
   .form-row-three-up {
     grid-template-columns: 1fr;
+  }
+
+  .activity-main-grid.form-row-three-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .activity-main-grid .moc-inline-control {
+    justify-content: flex-start;
+    gap: 8px;
   }
 
   .header-content {
@@ -5452,19 +5527,52 @@ body {
 
   .app-toolbar {
     align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .app-toolbar-copy {
+    min-width: 0;
+    max-width: 100%;
+    align-items: flex-start;
+    overflow: hidden;
   }
 
   .app-toolbar-brand {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
     overflow: hidden;
+    width: 100%;
+    justify-content: flex-start;
   }
 
-  .app-toolbar-copy strong,
+  .app-toolbar-logo {
+    width: clamp(30px, 7vw, 40px);
+    height: clamp(30px, 7vw, 40px);
+    padding: clamp(4px, 1.2vw, 6px);
+    border-radius: clamp(10px, 2.2vw, 14px);
+  }
+
   .app-toolbar-label {
+    display: block;
+    max-width: 100%;
+    font-size: clamp(0.56rem, calc(0.34rem + 1.25vw), var(--font-header-size-mobile-fluid)) !important;
+    line-height: 1.15;
+    letter-spacing: 0.01em;
+    text-transform: none;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-toolbar-copy strong {
+    display: none;
+  }
+
+  .app-toolbar-badge {
+    flex-shrink: 0;
+    max-width: 28vw;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -5479,10 +5587,24 @@ body {
   }
 }
 
+@media (max-width: 620px) {
+  .app-toolbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .app-toolbar-badge {
+    display: inline-flex;
+    max-width: 32vw;
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 0.56rem;
+    letter-spacing: 0.03em;
+  }
+}
+
 @media (max-width: 1024px) {
   .form-row-three-up {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-
-

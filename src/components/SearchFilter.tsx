@@ -112,7 +112,6 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
         <section className="search-card">
           <div className="search-card-header">
             <h4>Keyword</h4>
-            <p>Search across all text fields in the activity log.</p>
           </div>
 
           <div className="form-group">

@@ -51,17 +51,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
     void loadUsers()
   }, [])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
-
   const filteredUsers = useMemo(() => {
     if (!search.trim()) {
       return draftUsers
@@ -209,7 +198,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
         {error && <div className="error-message">{error}</div>}
         {success && <div className="success-message">{success}</div>}
 
-        <div className="form-group">
+        <div className="form-group user-management-search-group">
           <input
             type="text"
             value={search}
@@ -304,8 +293,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
             New signups stay pending until Admin approval. Default user access after approval: Dashboard, Search, Export.
           </small>
         </div>
-
-        <div className="modal-actions">
+        
+        <div className="modal-actions user-management-actions">
           <button
             type="button"
             className="btn btn-primary"
