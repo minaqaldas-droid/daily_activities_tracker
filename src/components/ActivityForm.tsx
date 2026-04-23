@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { SYSTEM_OPTIONS } from '../constants/systems'
-import { type Activity, getUsers } from '../supabaseClient'
+import { type Activity, getEditors } from '../supabaseClient'
 import { buildCommentWithPrefixes, parseCommentPrefixes } from '../utils/comments'
 
 interface ActivityFormProps {
@@ -18,6 +18,24 @@ const getTodayDate = () => {
   const month = String(today.getMonth() + 1).padStart(2, '0')
   const day = String(today.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+const MONTH_SHORT_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+const formatSelectedDateLabel = (value: string) => {
+  if (!value) {
+    return ''
+  }
+
+  const [year, month, day] = value.split('-')
+  const monthIndex = Number(month) - 1
+  const dayNumber = Number(day)
+
+  if (!year || Number.isNaN(monthIndex) || Number.isNaN(dayNumber) || monthIndex < 0 || monthIndex > 11) {
+    return value
+  }
+
+  return `${dayNumber}-${MONTH_SHORT_NAMES[monthIndex]}-${year}`
 }
 
 const getInitialFormData = (): Activity => ({
@@ -87,10 +105,10 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     const loadUsers = async () => {
       try {
         setIsLoadingUsers(true)
-        const users = await getUsers()
+        const users = await getEditors()
         setUsersList(users || [])
       } catch (error) {
-        console.error('Failed to load users:', error)
+        console.error('Failed to load editors:', error)
       } finally {
         setIsLoadingUsers(false)
       }

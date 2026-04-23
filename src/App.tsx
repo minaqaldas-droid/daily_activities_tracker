@@ -139,6 +139,8 @@ function matchesResultsPopupFilter(activity: Activity, filter?: ResultsPopupFilt
       return true
     case 'performer':
       return (activity.performer || '') === filter.performer
+    case 'performerIn':
+      return filter.performers.includes(activity.performer || '')
     case 'hasField':
       return Boolean((activity[filter.field] || '').trim())
     case 'sinceDate':

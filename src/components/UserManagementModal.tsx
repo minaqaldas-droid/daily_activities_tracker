@@ -1,27 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   type AdminManagedUser,
-  type FeatureKey,
   deleteManagedUser,
   getManagedUsers,
-  normalizePermissions,
   updateManagedUser,
 } from '../supabaseClient'
 
 interface UserManagementModalProps {
   onClose: () => void
 }
-
-const FEATURE_LABELS: Array<{ key: FeatureKey; label: string }> = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'add', label: 'Add Activity' },
-  { key: 'edit', label: 'Edit Activity' },
-  { key: 'search', label: 'Search' },
-  { key: 'import', label: 'Import' },
-  { key: 'export', label: 'Export' },
-  { key: 'edit_action', label: 'Edit' },
-  { key: 'delete_action', label: 'Delete' },
-]
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClose }) => {
   const [users, setUsers] = useState<AdminManagedUser[]>([])
@@ -75,36 +62,18 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
 
       return (
         original.role !== draftUser.role ||
-        original.is_approved !== draftUser.is_approved ||
-        JSON.stringify(original.permissions) !== JSON.stringify(draftUser.permissions)
+        original.is_approved !== draftUser.is_approved
       )
     })
   }, [deletedUserIds, draftUsers, users])
 
-  const handleRoleChange = (managedUser: AdminManagedUser, role: 'user' | 'admin') => {
+  const handleRoleChange = (managedUser: AdminManagedUser, role: AdminManagedUser['role']) => {
     setDraftUsers((previous) =>
       previous.map((item) =>
         item.id === managedUser.id
           ? {
               ...item,
               role,
-              permissions: normalizePermissions(item.permissions, role),
-            }
-          : item
-      )
-    )
-  }
-
-  const handlePermissionToggle = (managedUser: AdminManagedUser, key: FeatureKey, enabled: boolean) => {
-    setDraftUsers((previous) =>
-      previous.map((item) =>
-        item.id === managedUser.id
-          ? {
-              ...item,
-              permissions: {
-                ...item.permissions,
-                [key]: enabled,
-              },
             }
           : item
       )
@@ -158,8 +127,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
 
         const hasChanges =
           original.role !== draftUser.role ||
-          original.is_approved !== draftUser.is_approved ||
-          JSON.stringify(original.permissions) !== JSON.stringify(draftUser.permissions)
+          original.is_approved !== draftUser.is_approved
 
         if (!hasChanges) {
           continue
@@ -167,7 +135,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
 
         await updateManagedUser(draftUser.id, {
           role: draftUser.role,
-          permissions: draftUser.permissions,
           isApproved: draftUser.is_approved,
         })
       }
@@ -179,7 +146,17 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
       await loadUsers()
       setSuccess('Settings saved successfully.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save settings.')
+      const fallbackMessage = 'Failed to save settings.'
+      const rawMessage = err instanceof Error ? err.message : fallbackMessage
+      const isRoleConstraintError =
+        rawMessage.includes('users_role_check') ||
+        (rawMessage.includes('role') && rawMessage.includes('violates check constraint'))
+
+      setError(
+        isRoleConstraintError
+          ? 'Failed to save settings. Database role constraints are outdated. Run MIGRATION_ROLE_MODEL_EDITOR_VIEWER.sql in Supabase SQL Editor.'
+          : rawMessage
+      )
     } finally {
       setIsMutating(false)
     }
@@ -231,11 +208,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
                   <td data-label="Role">
                     <select
                       value={managedUser.role}
-                      onChange={(e) => handleRoleChange(managedUser, e.target.value as 'user' | 'admin')}
+                      onChange={(e) =>
+                        handleRoleChange(managedUser, e.target.value as AdminManagedUser['role'])
+                      }
                       disabled={isMutating}
                     >
-                      <option value="user">User</option>
                       <option value="admin">Admin</option>
+                      <option value="editor">Editor</option>
+                      <option value="viewer">Viewer</option>
                     </select>
                   </td>
                   <td data-label="Status">
@@ -264,36 +244,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
           </table>
         </div>
 
-        <div className="form-group">
-          <label>Role-based Access Control</label>
-          {filteredUsers.map((managedUser) => (
-            <div key={`permissions-${managedUser.id}`} className="rbac-row">
-              <div className="rbac-user-meta">
-                <strong>{managedUser.name}</strong>
-                <span>{managedUser.email}</span>
-              </div>
-              <div className="rbac-checkbox-grid">
-                {FEATURE_LABELS.map((feature) => (
-                  <label key={`${managedUser.id}-${feature.key}`} className="rbac-permission-item">
-                    <span>{feature.label}</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(managedUser.permissions[feature.key])}
-                      onChange={(event) =>
-                        handlePermissionToggle(managedUser, feature.key, event.target.checked)
-                      }
-                      disabled={isMutating}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
-          <small className="form-hint">
-            New signups stay pending until Admin approval. Default user access after approval: Dashboard, Search, Export.
-          </small>
-        </div>
-        
         <div className="modal-actions user-management-actions">
           <button
             type="button"

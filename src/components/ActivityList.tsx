@@ -266,7 +266,6 @@ export const ActivityList: React.FC<ActivityListProps> = ({
             </th>
             <th className="col-actions resizable-th">
               Edit/Delete
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('actions', event)} />
             </th>
           </tr>
         </thead>

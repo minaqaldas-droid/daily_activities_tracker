@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
-import { type Activity, getUsersCount } from '../supabaseClient'
+import { type Activity, getEditors, getEditorsCount } from '../supabaseClient'
 import { ActivityList } from './ActivityList'
 
 export type DashboardResultsFilter =
   | { kind: 'all' }
   | { kind: 'performer'; performer: string }
+  | { kind: 'performerIn'; performers: string[] }
   | { kind: 'hasField'; field: 'performer' | 'system' | 'tag' }
   | { kind: 'sinceDate'; sinceDate: string }
   | { kind: 'activityType'; activityType: string }
@@ -281,11 +282,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
     teamMembersCount: 0,
     thisWeekActivities: 0,
   })
+  const [editorNames, setEditorNames] = useState<string[]>([])
 
   useEffect(() => {
     let isMounted = true
 
-    void getUsersCount()
+    void getEditorsCount()
       .then((count) => {
         if (!isMounted) {
           return
@@ -297,7 +299,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
         }))
       })
       .catch((error) => {
-        console.error('Failed to load users count:', error)
+        console.error('Failed to load editors count:', error)
+      })
+
+    void getEditors()
+      .then((editors) => {
+        if (!isMounted) {
+          return
+        }
+
+        setEditorNames((editors || []).map((editor) => editor.name))
+      })
+      .catch((error) => {
+        console.error('Failed to load editors list:', error)
       })
 
     return () => {
@@ -352,7 +366,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const myActivitiesList = activities.filter((activity) => activity.performer === performerName)
   const activitiesWithSystems = activities.filter((activity) => Boolean(activity.system))
   const activitiesWithTags = activities.filter((activity) => Boolean(activity.tag))
-  const activitiesWithPerformers = activities.filter((activity) => Boolean(activity.performer))
+  const activitiesWithPerformers = activities.filter((activity) => editorNames.includes(activity.performer || ''))
   const thisWeekActivitiesList = activities.filter((activity) => activity.date >= thisWeekSinceDate)
 
   const openActivityResults = (request: DashboardActivityRequest) => {
@@ -543,20 +557,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
           onClick={() =>
             openActivityResults({
               title: '👥 Team Members',
-              description: 'Showing activities with performer information across the team.',
+              description: 'Showing activities performed by editors.',
               activities: activitiesWithPerformers,
               exportFilename: 'Dashboard_Team_Activities.xlsx',
-              filter: { kind: 'hasField', field: 'performer' },
+              filter: { kind: 'performerIn', performers: editorNames },
             })
           }
           onKeyDown={(event) =>
             handleDashboardCardKeyDown(event, () =>
               openActivityResults({
                 title: '👥 Team Members',
-                description: 'Showing activities with performer information across the team.',
+                description: 'Showing activities performed by editors.',
                 activities: activitiesWithPerformers,
                 exportFilename: 'Dashboard_Team_Activities.xlsx',
-                filter: { kind: 'hasField', field: 'performer' },
+                filter: { kind: 'performerIn', performers: editorNames },
               })
             )
           }

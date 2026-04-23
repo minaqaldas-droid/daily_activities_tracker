@@ -42,11 +42,13 @@ export interface Activity {
   created_at?: string
 }
 
+export type UserRole = 'admin' | 'editor' | 'viewer'
+
 export interface User {
   id: string
   email: string
   name: string
-  role: 'user' | 'admin'
+  role: UserRole
   avatar_url?: string
   preferred_primary_color?: string
   permissions?: FeaturePermissions
@@ -108,7 +110,7 @@ type UserProfileRow = {
   id: string
   email: string
   name: string
-  role: 'user' | 'admin' | 'superadmin' | null
+  role: 'admin' | 'editor' | 'viewer' | 'user' | 'superadmin' | null
   avatar_url?: string | null
   preferred_primary_color?: string | null
   permissions?: Partial<FeaturePermissions> | null
@@ -133,7 +135,7 @@ export interface AdminManagedUser {
   id: string
   email: string
   name: string
-  role: 'user' | 'admin'
+  role: UserRole
   permissions: FeaturePermissions
   is_approved: boolean
   approved_at?: string | null
@@ -143,8 +145,7 @@ export interface AdminManagedUser {
 interface UpdateManagedUserInput {
   email?: string
   name?: string
-  role?: 'user' | 'admin'
-  permissions?: FeaturePermissions
+  role?: UserRole
   isApproved?: boolean
 }
 
@@ -163,17 +164,6 @@ const DEFAULT_SETTINGS: Settings = {
   sidebar_font_size: '0.95rem',
 }
 
-export const DEFAULT_USER_PERMISSIONS: FeaturePermissions = {
-  dashboard: true,
-  add: false,
-  edit: false,
-  search: true,
-  import: false,
-  export: true,
-  edit_action: false,
-  delete_action: false,
-}
-
 export const ADMIN_PERMISSIONS: FeaturePermissions = {
   dashboard: true,
   add: true,
@@ -185,16 +175,43 @@ export const ADMIN_PERMISSIONS: FeaturePermissions = {
   delete_action: true,
 }
 
+export const EDITOR_PERMISSIONS: FeaturePermissions = {
+  dashboard: true,
+  add: true,
+  edit: true,
+  search: true,
+  import: true,
+  export: true,
+  edit_action: true,
+  delete_action: true,
+}
+
+export const VIEWER_PERMISSIONS: FeaturePermissions = {
+  dashboard: true,
+  add: false,
+  edit: false,
+  search: true,
+  import: false,
+  export: true,
+  edit_action: false,
+  delete_action: false,
+}
+
+export const DEFAULT_USER_PERMISSIONS: FeaturePermissions = VIEWER_PERMISSIONS
+
 export function normalizePermissions(
-  permissions: Partial<FeaturePermissions> | null | undefined,
+  _permissions: Partial<FeaturePermissions> | null | undefined,
   role: User['role']
 ): FeaturePermissions {
-  const base = role === 'admin' ? ADMIN_PERMISSIONS : DEFAULT_USER_PERMISSIONS
-
-  return {
-    ...base,
-    ...(permissions || {}),
+  if (role === 'admin') {
+    return { ...ADMIN_PERMISSIONS }
   }
+
+  if (role === 'editor') {
+    return { ...EDITOR_PERMISSIONS }
+  }
+
+  return { ...VIEWER_PERMISSIONS }
 }
 
 export function hasPermission(user: User | null | undefined, feature: FeatureKey) {
@@ -210,6 +227,18 @@ export function hasPermission(user: User | null | undefined, feature: FeatureKey
   return Boolean(normalized[feature])
 }
 
+function normalizeUserRole(role: UserProfileRow['role'] | undefined): UserRole {
+  if (role === 'admin' || role === 'superadmin') {
+    return 'admin'
+  }
+
+  if (role === 'editor') {
+    return 'editor'
+  }
+
+  return 'viewer'
+}
+
 function getMetadataAvatar(authUser: SupabaseAuthUser) {
   const metadataAvatar =
     typeof authUser.user_metadata?.avatar_url === 'string'
@@ -220,7 +249,7 @@ function getMetadataAvatar(authUser: SupabaseAuthUser) {
 }
 
 function normalizeUserProfile(profile: UserProfileRow, avatarUrl?: string): User {
-  const normalizedRole = profile.role === 'admin' || profile.role === 'superadmin' ? 'admin' : 'user'
+  const normalizedRole = normalizeUserRole(profile.role)
   const normalizedAvatar = (avatarUrl || profile.avatar_url || '').trim()
   const normalizedPrimaryColor = (profile.preferred_primary_color || '').trim()
   const normalizedPermissions = normalizePermissions(profile.permissions, normalizedRole)
@@ -241,7 +270,7 @@ function normalizeUserProfile(profile: UserProfileRow, avatarUrl?: string): User
 }
 
 function normalizeManagedUser(profile: UserProfileRow): AdminManagedUser {
-  const normalizedRole = profile.role === 'admin' || profile.role === 'superadmin' ? 'admin' : 'user'
+  const normalizedRole = normalizeUserRole(profile.role)
   return {
     id: profile.id,
     email: profile.email,
@@ -364,10 +393,10 @@ async function syncUserProfile(authUser: SupabaseAuthUser) {
     id: authUser.id,
     email: authUser.email ?? existingProfile?.email ?? '',
     name: existingProfile?.name || getMetadataName(authUser),
-    role: existingProfile?.role ?? 'user',
+    role: existingProfile?.role ?? 'viewer',
     avatar_url: metadataAvatar || existingProfile?.avatar_url,
     preferred_primary_color: existingProfile?.preferred_primary_color || '',
-    permissions: normalizePermissions(existingProfile?.permissions, existingProfile?.role || 'user'),
+    permissions: normalizePermissions(existingProfile?.permissions, existingProfile?.role || 'viewer'),
     is_approved: existingProfile?.is_approved ?? true,
     approved_at: existingProfile?.approved_at ?? null,
     created_at: existingProfile?.created_at,
@@ -693,6 +722,22 @@ export async function getUsers() {
   }
 }
 
+export async function getEditors() {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .eq('role', 'editor')
+      .order('name', { ascending: true })
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error fetching editors:', error)
+    throw error
+  }
+}
+
 export async function getActivitiesByUser(userName: string) {
   try {
     const { data, error } = await supabase
@@ -889,6 +934,19 @@ export async function getUsersCount() {
   return count || 0
 }
 
+export async function getEditorsCount() {
+  const { count, error } = await supabase
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'editor')
+
+  if (error) {
+    throw error
+  }
+
+  return count || 0
+}
+
 export async function getManagedUsers() {
   const { data, error } = await supabase
     .from('users')
@@ -906,10 +964,9 @@ export async function createManagedUser(input: {
   id: string
   email: string
   name: string
-  role: 'user' | 'admin'
-  permissions?: FeaturePermissions
+  role: UserRole
 }) {
-  const permissions = normalizePermissions(input.permissions, input.role)
+  const permissions = normalizePermissions(undefined, input.role)
 
   const { data, error } = await supabase
     .from('users')
@@ -951,10 +1008,7 @@ export async function updateManagedUser(userId: string, input: UpdateManagedUser
 
   if (input.role) {
     payload.role = input.role
-  }
-
-  if (input.permissions) {
-    payload.permissions = normalizePermissions(input.permissions, input.role || 'user')
+    payload.permissions = normalizePermissions(undefined, input.role)
   }
 
   if (typeof input.isApproved === 'boolean') {

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'editor', 'admin')),
   avatar_url TEXT NOT NULL DEFAULT '',
   preferred_primary_color TEXT NOT NULL DEFAULT '',
   permissions JSONB NOT NULL DEFAULT '{"dashboard": true, "add": false, "edit": false, "search": true, "import": false, "export": true, "edit_action": false, "delete_action": false}'::jsonb,
@@ -88,6 +88,28 @@ AS $$
   SELECT public.is_admin();
 $$;
 
+CREATE OR REPLACE FUNCTION public.has_feature_permission(feature_name TEXT)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    (
+      SELECT
+        CASE
+          WHEN role = 'admin' THEN TRUE
+          ELSE COALESCE((permissions ->> feature_name)::boolean, FALSE)
+        END
+      FROM public.users
+      WHERE id = auth.uid()
+      LIMIT 1
+    ),
+    FALSE
+  );
+$$;
+
 CREATE OR REPLACE FUNCTION public.admin_delete_user(target_user_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql
@@ -120,7 +142,7 @@ BEGIN
     NEW.id,
     NEW.email,
     COALESCE(NULLIF(NEW.raw_user_meta_data ->> 'name', ''), split_part(NEW.email, '@', 1)),
-    'user'
+    'viewer'
   )
   ON CONFLICT (id) DO UPDATE
   SET
@@ -173,22 +195,22 @@ CREATE POLICY "Authenticated users can insert activities"
   ON public.activities
   FOR INSERT
   TO authenticated
-  WITH CHECK (true);
+  WITH CHECK (public.has_feature_permission('add'));
 
 DROP POLICY IF EXISTS "Authenticated users can update activities" ON public.activities;
 CREATE POLICY "Authenticated users can update activities"
   ON public.activities
   FOR UPDATE
   TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (public.has_feature_permission('edit_action'))
+  WITH CHECK (public.has_feature_permission('edit_action'));
 
 DROP POLICY IF EXISTS "Authenticated users can delete activities" ON public.activities;
 CREATE POLICY "Authenticated users can delete activities"
   ON public.activities
   FOR DELETE
   TO authenticated
-  USING (true);
+  USING (public.has_feature_permission('delete_action'));
 
 DROP POLICY IF EXISTS "Authenticated users can read profiles" ON public.users;
 CREATE POLICY "Authenticated users can read profiles"
