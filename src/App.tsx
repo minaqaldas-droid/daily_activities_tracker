@@ -22,13 +22,12 @@ const ExcelExport = lazy(() =>
   import('./components/ExcelExport').then((module) => ({ default: module.ExcelExport }))
 )
 
-type AppView = 'dashboard' | 'add' | 'edit' | 'search' | 'import' | 'export'
+type AppView = 'dashboard' | 'add' | 'search' | 'import' | 'export'
 type AppMessage = { type: 'success' | 'error'; text: string } | null
 
 const APP_VIEW_LABELS: Record<AppView, string> = {
   dashboard: 'Dashboard',
   add: 'Add Activity',
-  edit: 'Edit Activity',
   search: 'Search',
   import: 'Import Excel',
   export: 'Export Excel',
@@ -188,6 +187,11 @@ function App() {
         return
       }
 
+      if (editingId && editingData) {
+        handleCancelEdit()
+        return
+      }
+
       if (resultsPopup) {
         setResultsPopup(null)
         return
@@ -210,7 +214,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [resultsPopup, showAccountSettings, showAdminPanel, showUserManagement])
+  }, [editingData, editingId, resultsPopup, showAccountSettings, showAdminPanel, showUserManagement])
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -235,19 +239,22 @@ function App() {
     }
 
     const isAnyModalOpen =
-      Boolean(resultsPopup) || showAccountSettings || showAdminPanel || showUserManagement
+      Boolean(resultsPopup) ||
+      Boolean(editingId && editingData) ||
+      showAccountSettings ||
+      showAdminPanel ||
+      showUserManagement
 
     document.body.classList.toggle('modal-open', isAnyModalOpen)
 
     return () => {
       document.body.classList.remove('modal-open')
     }
-  }, [resultsPopup, showAccountSettings, showAdminPanel, showUserManagement])
+  }, [editingData, editingId, resultsPopup, showAccountSettings, showAdminPanel, showUserManagement])
 
   const isAdmin = currentUser?.role === 'admin'
   const canViewDashboard = hasPermission(currentUser, 'dashboard')
   const canAddActivity = hasPermission(currentUser, 'add')
-  const canOpenEditView = hasPermission(currentUser, 'edit')
   const canSearch = hasPermission(currentUser, 'search')
   const canImport = hasPermission(currentUser, 'import')
   const canExport = hasPermission(currentUser, 'export')
@@ -293,7 +300,6 @@ function App() {
       if (isEditing) {
         setEditingId(null)
         setEditingData(undefined)
-        setCurrentView('dashboard')
       }
     } catch (error) {
       setMessage({
@@ -309,11 +315,8 @@ function App() {
       return
     }
 
-    setResultsPopup(null)
     setEditingId(activity.id || null)
     setEditingData(activity)
-    setCurrentView('edit')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleDeleteActivity = async (id: string) => {
@@ -378,7 +381,6 @@ function App() {
   const handleCancelEdit = () => {
     setEditingId(null)
     setEditingData(undefined)
-    setCurrentView('dashboard')
   }
 
   const handleSettingsUpdate = (newSettings: Settings) => {
@@ -423,11 +425,6 @@ function App() {
 
     if (view === 'add' && !canAddActivity) {
       setMessage({ type: 'error', text: ADD_RESTRICTED_MESSAGE })
-      return
-    }
-
-    if (view === 'edit' && !canOpenEditView) {
-      setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })
       return
     }
 
@@ -591,50 +588,6 @@ function App() {
               </div>
             )}
 
-            {currentView === 'edit' && editingId && editingData ? (
-              <>
-                <div className="form-section">
-                  <h2>📝 Edit Activity</h2>
-                  <ActivityForm
-                    onSubmit={handleAddOrUpdateActivity}
-                    initialData={editingData}
-                    isLoading={isLoading}
-                    performerMode={settings.performer_mode || 'manual'}
-                    currentUserName={currentUser.name}
-                  />
-                  <button className="btn btn-secondary" onClick={handleCancelEdit} style={{ marginTop: '10px' }}>
-                    Back to Dashboard
-                  </button>
-                </div>
-
-                <div className="list-section">
-                  <h2>📋 Latest 10 Activities</h2>
-                  <ActivityList
-                    activities={activities.slice(0, 10)}
-                    onEdit={handleEditActivity}
-                    onDelete={handleDeleteActivity}
-                    isLoading={isLoading}
-                    canEdit={canEditAction}
-                    canDelete={canDeleteAction}
-                    onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
-                    onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
-                  />
-                </div>
-              </>
-            ) : currentView === 'edit' ? (
-              <div className="empty-state">
-                <p>No activity selected for editing. Choose one from the dashboard or search results.</p>
-                <div className="empty-state-actions">
-                  <button className="btn btn-primary" onClick={() => handleViewChange('dashboard')}>
-                    Go to Dashboard
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => handleViewChange('search')}>
-                    Go to Search
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
             {currentView === 'search' && (
               <>
                 <div className="search-section">
@@ -762,6 +715,34 @@ function App() {
 
         {showUserManagement && currentUser.role === 'admin' && (
           <UserManagementModal onClose={() => setShowUserManagement(false)} />
+        )}
+
+        {editingId && editingData && (
+          <div className="modal-overlay edit-activity-overlay" onClick={handleCancelEdit}>
+            <div
+              className="settings-modal edit-activity-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="edit-activity-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="modal-header">
+                <h2 id="edit-activity-modal-title">Edit Activity</h2>
+                <button className="modal-close" onClick={handleCancelEdit} aria-label="Close edit activity modal">
+                  ×
+                </button>
+              </div>
+              <div className="edit-activity-body">
+                <ActivityForm
+                  onSubmit={handleAddOrUpdateActivity}
+                  initialData={editingData}
+                  isLoading={isLoading}
+                  performerMode={settings.performer_mode || 'manual'}
+                  currentUserName={currentUser.name}
+                />
+              </div>
+            </div>
+          </div>
         )}
 
         <ActivityResultsPopup

@@ -1235,6 +1235,23 @@ body.modal-open {
   max-height: 92vh;
 }
 
+.edit-activity-overlay {
+  background: rgba(15, 23, 42, 0.56);
+  backdrop-filter: blur(6px);
+  z-index: 1100;
+}
+
+.edit-activity-modal {
+  width: min(1080px, 96vw);
+  max-width: 1080px;
+  max-height: 92vh;
+}
+
+.edit-activity-body {
+  padding: 20px 24px 24px;
+  overflow-y: auto;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;

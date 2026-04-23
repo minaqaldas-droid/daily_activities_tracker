@@ -3,8 +3,8 @@ import { hasPermission, type User } from '../supabaseClient'
 
 interface SidebarProps {
   currentUser: User
-  currentView: 'dashboard' | 'add' | 'edit' | 'search' | 'import' | 'export'
-  onViewChange: (view: 'dashboard' | 'add' | 'edit' | 'search' | 'import' | 'export') => void
+  currentView: 'dashboard' | 'add' | 'search' | 'import' | 'export'
+  onViewChange: (view: 'dashboard' | 'add' | 'search' | 'import' | 'export') => void
   isExpanded: boolean
   isMobileViewport: boolean
   isMobileOpen: boolean
@@ -21,7 +21,6 @@ type NavView = SidebarProps['currentView']
 const featureItems: Array<{ icon: string; label: string; view: NavView; requiresAdmin?: boolean }> = [
   { icon: '📊', label: 'Dashboard', view: 'dashboard' },
   { icon: '➕', label: 'Add Activity', view: 'add', requiresAdmin: true },
-  { icon: '📝', label: 'Edit Activity', view: 'edit', requiresAdmin: true },
   { icon: '🔍', label: 'Search', view: 'search' },
 ]
 
@@ -46,7 +45,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const isAdmin = currentUser.role === 'admin'
   const canAdd = hasPermission(currentUser, 'add')
-  const canEditView = hasPermission(currentUser, 'edit')
   const canImport = hasPermission(currentUser, 'import')
   const canExport = hasPermission(currentUser, 'export')
   const canDashboard = hasPermission(currentUser, 'dashboard')
@@ -167,7 +165,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {featureItems.map((item) => {
             const isRestricted = (() => {
               if (item.view === 'add') return !canAdd
-              if (item.view === 'edit') return !canEditView
               if (item.view === 'dashboard') return !canDashboard
               if (item.view === 'search') return !canSearch
               return Boolean(item.requiresAdmin && !isAdmin)
