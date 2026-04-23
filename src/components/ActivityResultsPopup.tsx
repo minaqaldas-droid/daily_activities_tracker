@@ -121,17 +121,34 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
             {filteredActivities.length} activit{filteredActivities.length === 1 ? 'y' : 'ies'}
           </span>
 
-          <input
-            type="text"
-            className="results-popup-search"
-            placeholder="Search results..."
-            value={keyword}
-            onChange={(event) => {
-              setKeyword(event.target.value)
-              setCurrentPage(1)
-            }}
-            disabled={isLoading || isExporting}
-          />
+          <div className="results-popup-search-wrap">
+            <input
+              type="text"
+              className="results-popup-search"
+              placeholder="Search results..."
+              value={keyword}
+              onChange={(event) => {
+                setKeyword(event.target.value)
+                setCurrentPage(1)
+              }}
+              disabled={isLoading || isExporting}
+            />
+            {keyword && (
+              <button
+                type="button"
+                className="results-popup-search-clear"
+                onClick={() => {
+                  setKeyword('')
+                  setCurrentPage(1)
+                }}
+                disabled={isLoading || isExporting}
+                aria-label="Clear results search"
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
 
           <label className="results-popup-page-size">
             Rows

@@ -3,16 +3,22 @@ import { AccountSettings } from './components/AccountSettings'
 import { ActivityForm } from './components/ActivityForm'
 import { ActivityList } from './components/ActivityList'
 import { ActivityResultsPopup } from './components/ActivityResultsPopup'
-import { Dashboard, type DashboardActivityRequest } from './components/Dashboard'
+import {
+  Dashboard,
+  type DashboardActivityRequest,
+  type DashboardResultsFilter,
+} from './components/Dashboard'
 import { Login } from './components/Login'
 import { SearchFilter } from './components/SearchFilter'
 import { Sidebar } from './components/Sidebar'
 import { AdminPanel } from './components/SuperAdminPanel'
 import { UserManagementModal } from './components/UserManagementModal'
+import { getActivityTypeLabel } from './constants/activityTypes'
 import { useActivities } from './hooks/useActivities'
 import { useAuth } from './hooks/useAuth'
 import { useSettings } from './hooks/useSettings'
 import { hasPermission, type Activity, type SearchFilters, type Settings, type User } from './supabaseClient'
+import { formatDateForDisplay } from './utils/date'
 
 const ExcelImport = lazy(() =>
   import('./components/ExcelImport').then((module) => ({ default: module.ExcelImport }))
@@ -38,7 +44,10 @@ interface ResultsPopupState {
   description: string
   activities: Activity[]
   exportFilename: string
+  filter?: ResultsPopupFilter
 }
+
+type ResultsPopupFilter = DashboardResultsFilter | { kind: 'search'; filters: SearchFilters }
 
 const MOBILE_NAV_MEDIA_QUERY = '(max-width: 768px)'
 const EDIT_RESTRICTED_MESSAGE = 'Only Admin users can edit activities.'
@@ -48,6 +57,101 @@ const ADD_RESTRICTED_MESSAGE = 'Only Admin users can add activities.'
 
 function hasSearchFilters(filters: SearchFilters) {
   return Object.values(filters).some((value) => Boolean(value))
+}
+
+function includesIgnoreCase(value: string, keyword: string) {
+  return value.toLowerCase().includes(keyword.toLowerCase())
+}
+
+function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilters) {
+  if (!hasSearchFilters(filters)) {
+    return true
+  }
+
+  if (filters.date && activity.date !== filters.date) {
+    return false
+  }
+
+  if (!filters.date) {
+    if (filters.startDate && activity.date < filters.startDate) {
+      return false
+    }
+
+    if (filters.endDate && activity.date > filters.endDate) {
+      return false
+    }
+  }
+
+  if (filters.performer && !includesIgnoreCase(activity.performer || '', filters.performer)) {
+    return false
+  }
+
+  if (filters.tag && !includesIgnoreCase(activity.tag || '', filters.tag)) {
+    return false
+  }
+
+  if (filters.system && (activity.system || '') !== filters.system) {
+    return false
+  }
+
+  if (filters.activityType && (activity.activityType || '') !== filters.activityType) {
+    return false
+  }
+
+  if (filters.keyword) {
+    const keyword = filters.keyword.toLowerCase()
+    const searchableFields = [
+      activity.date,
+      formatDateForDisplay(activity.date),
+      activity.performer,
+      activity.system,
+      activity.activityType || '',
+      getActivityTypeLabel(activity.activityType),
+      activity.tag,
+      activity.problem,
+      activity.action,
+      activity.comments || '',
+      activity.editedBy || '',
+    ]
+    const hasKeywordMatch = searchableFields.some((field) =>
+      String(field || '')
+        .toLowerCase()
+        .includes(keyword)
+    )
+
+    if (!hasKeywordMatch) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function matchesResultsPopupFilter(activity: Activity, filter?: ResultsPopupFilter) {
+  if (!filter) {
+    return true
+  }
+
+  switch (filter.kind) {
+    case 'search':
+      return matchesSearchFiltersForActivity(activity, filter.filters)
+    case 'all':
+      return true
+    case 'performer':
+      return (activity.performer || '') === filter.performer
+    case 'hasField':
+      return Boolean((activity[filter.field] || '').trim())
+    case 'sinceDate':
+      return (activity.date || '') >= filter.sinceDate
+    case 'activityType':
+      return (activity.activityType || '') === filter.activityType
+    case 'system':
+      return (activity.system || '') === filter.system
+    case 'tag':
+      return (activity.tag || '') === filter.tag
+    default:
+      return true
+  }
 }
 
 function App() {
@@ -79,6 +183,7 @@ function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [showUserManagement, setShowUserManagement] = useState(false)
   const [resultsPopup, setResultsPopup] = useState<ResultsPopupState | null>(null)
+  const [lastSearchFilters, setLastSearchFilters] = useState<SearchFilters>({})
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === 'undefined') {
       return false
@@ -261,11 +366,15 @@ function App() {
   const canEditAction = hasPermission(currentUser, 'edit_action')
   const canDeleteAction = hasPermission(currentUser, 'delete_action')
 
-  const buildSearchResultsPopup = (sourceActivities: Activity[]): ResultsPopupState => ({
+  const buildSearchResultsPopup = (
+    sourceActivities: Activity[],
+    filters: SearchFilters = lastSearchFilters
+  ): ResultsPopupState => ({
     title: '🔎 Search Results',
     description: `Showing ${sourceActivities.length} activit${sourceActivities.length === 1 ? 'y' : 'ies'} matching the current filters.`,
     activities: sourceActivities,
     exportFilename: 'Search_Results.xlsx',
+    filter: { kind: 'search', filters },
   })
 
   const handleLogin = async (email: string, password: string) => {
@@ -298,6 +407,44 @@ function App() {
       })
 
       if (isEditing) {
+        const editedActivityId = editingId || editingData?.id || activity.id || ''
+        const editedActivity: Activity = {
+          ...(editingData || {}),
+          ...activity,
+          id: editedActivityId || activity.id,
+        }
+
+        if (editedActivityId) {
+          setResultsPopup((prev) => {
+            if (!prev) {
+              return prev
+            }
+
+            const itemIndex = prev.activities.findIndex((item) => item.id === editedActivityId)
+            if (itemIndex === -1) {
+              return prev
+            }
+
+            if (!matchesResultsPopupFilter(editedActivity, prev.filter)) {
+              return {
+                ...prev,
+                activities: prev.activities.filter((item) => item.id !== editedActivityId),
+              }
+            }
+
+            const nextActivities = [...prev.activities]
+            nextActivities[itemIndex] = {
+              ...nextActivities[itemIndex],
+              ...editedActivity,
+            }
+
+            return {
+              ...prev,
+              activities: nextActivities,
+            }
+          })
+        }
+
         setEditingId(null)
         setEditingData(undefined)
       }
@@ -346,10 +493,11 @@ function App() {
 
   const handleSearch = async (filters: SearchFilters) => {
     try {
+      setLastSearchFilters(filters)
       const results = await runSearch(filters)
 
       if (hasSearchFilters(filters)) {
-        setResultsPopup(buildSearchResultsPopup(results))
+        setResultsPopup(buildSearchResultsPopup(results, filters))
       } else {
         setResultsPopup(null)
       }
@@ -394,6 +542,7 @@ function App() {
       description: request.description,
       activities: request.activities,
       exportFilename: request.exportFilename || `${request.title.replace(/\s+/g, '_')}.xlsx`,
+      filter: request.filter,
     })
   }
 
@@ -472,7 +621,7 @@ function App() {
   }
 
   const latestSearchActivities = activities.slice(0, 10)
-  const searchResultsPopupState = buildSearchResultsPopup(filteredActivities)
+  const searchResultsPopupState = buildSearchResultsPopup(filteredActivities, lastSearchFilters)
   const currentViewLabel = APP_VIEW_LABELS[currentView]
 
   return (

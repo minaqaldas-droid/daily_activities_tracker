@@ -20,5 +20,6 @@ export const SYSTEM_OPTIONS = [
   'Steam Boiler',
   'Air Dryer A/B',
   'Air Dryer C/D',
+  'Flare IQ',
   '400CEMS',
 ] as const

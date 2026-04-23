@@ -426,6 +426,32 @@ function matchesSearchFilters(filters: SearchFilters) {
   return Object.values(filters).some((value) => Boolean(value))
 }
 
+const ACTIVITY_FETCH_BATCH_SIZE = 1000
+
+async function fetchAllActivitiesBatched(buildQuery: () => any) {
+  let offset = 0
+  const rows: Array<Partial<Activity>> = []
+
+  while (true) {
+    const { data, error } = await buildQuery().range(offset, offset + ACTIVITY_FETCH_BATCH_SIZE - 1)
+
+    if (error) {
+      throw error
+    }
+
+    const batch = (data || []) as Array<Partial<Activity>>
+    rows.push(...batch)
+
+    if (batch.length < ACTIVITY_FETCH_BATCH_SIZE) {
+      break
+    }
+
+    offset += ACTIVITY_FETCH_BATCH_SIZE
+  }
+
+  return rows
+}
+
 export async function getCurrentUserProfile() {
   const {
     data: { user },
@@ -482,13 +508,13 @@ export function subscribeToAuthChanges(callback: (user: User | null) => void) {
 
 export async function getActivities() {
   try {
-    const { data, error } = await supabase
+    const data = await fetchAllActivitiesBatched(() =>
+      supabase
       .from('activities')
       .select('*')
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
-
-    if (error) throw error
+    )
     return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
   } catch (error) {
     console.error('Error fetching activities:', error)
@@ -1021,11 +1047,11 @@ export async function searchActivities(filters: SearchFilters) {
       query = query.eq('activityType', filters.activityType)
     }
 
-    const { data, error } = await query
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
+    const data = await fetchAllActivitiesBatched(() =>
+      query
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+    )
 
     let results = (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
     if (filters.keyword) {

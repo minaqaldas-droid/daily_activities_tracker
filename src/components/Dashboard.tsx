@@ -3,11 +3,21 @@ import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { type Activity, getUsersCount } from '../supabaseClient'
 import { ActivityList } from './ActivityList'
 
+export type DashboardResultsFilter =
+  | { kind: 'all' }
+  | { kind: 'performer'; performer: string }
+  | { kind: 'hasField'; field: 'performer' | 'system' | 'tag' }
+  | { kind: 'sinceDate'; sinceDate: string }
+  | { kind: 'activityType'; activityType: string }
+  | { kind: 'system'; system: string }
+  | { kind: 'tag'; tag: string }
+
 export interface DashboardActivityRequest {
   title: string
   description: string
   activities: Activity[]
   exportFilename?: string
+  filter?: DashboardResultsFilter
 }
 
 interface DashboardProps {
@@ -338,11 +348,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const performerChartData = createChartData(stats.activityByPerformer)
   const activityTypeChartData = createActivityTypeChartData(stats.activityByType)
   const tagChartData = createChartData(stats.activityByTag).slice(0, 20)
+  const thisWeekSinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const myActivitiesList = activities.filter((activity) => activity.performer === performerName)
   const activitiesWithSystems = activities.filter((activity) => Boolean(activity.system))
   const activitiesWithTags = activities.filter((activity) => Boolean(activity.tag))
   const activitiesWithPerformers = activities.filter((activity) => Boolean(activity.performer))
-  const thisWeekActivitiesList = activities.filter((activity) => activity.date >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+  const thisWeekActivitiesList = activities.filter((activity) => activity.date >= thisWeekSinceDate)
 
   const openActivityResults = (request: DashboardActivityRequest) => {
     onOpenActivityResults?.(request)
@@ -355,6 +366,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for ${item.label}.`,
       activities: activities.filter((activity) => (activity.activityType || '') === targetType),
       exportFilename: `Dashboard_Activity_Type_${item.label.replace(/\s+/g, '_')}.xlsx`,
+      filter: { kind: 'activityType', activityType: targetType },
     })
   }
 
@@ -364,6 +376,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for performer ${item.label}.`,
       activities: activities.filter((activity) => (activity.performer || '') === item.key),
       exportFilename: `Dashboard_Performer_${item.label.replace(/\s+/g, '_')}.xlsx`,
+      filter: { kind: 'performer', performer: item.key },
     })
   }
 
@@ -373,6 +386,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for system ${item.label}.`,
       activities: activities.filter((activity) => (activity.system || '') === item.key),
       exportFilename: `Dashboard_System_${item.label.replace(/\s+/g, '_')}.xlsx`,
+      filter: { kind: 'system', system: item.key },
     })
   }
 
@@ -382,6 +396,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} tagged with ${item.label}.`,
       activities: activities.filter((activity) => (activity.tag || '') === item.key),
       exportFilename: `Dashboard_Tag_${item.label.replace(/\s+/g, '_')}.xlsx`,
+      filter: { kind: 'tag', tag: item.key },
     })
   }
 
@@ -403,6 +418,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               description: `Showing all ${activities.length} recorded activities.`,
               activities,
               exportFilename: 'Dashboard_Total_Activities.xlsx',
+              filter: { kind: 'all' },
             })
           }
           onKeyDown={(event) =>
@@ -412,6 +428,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 description: `Showing all ${activities.length} recorded activities.`,
                 activities,
                 exportFilename: 'Dashboard_Total_Activities.xlsx',
+                filter: { kind: 'all' },
               })
             )
           }
@@ -433,6 +450,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               description: `Showing activities performed by ${performerName}.`,
               activities: myActivitiesList,
               exportFilename: 'Dashboard_My_Activities.xlsx',
+              filter: { kind: 'performer', performer: performerName },
             })
           }
           onKeyDown={(event) =>
@@ -442,6 +460,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 description: `Showing activities performed by ${performerName}.`,
                 activities: myActivitiesList,
                 exportFilename: 'Dashboard_My_Activities.xlsx',
+                filter: { kind: 'performer', performer: performerName },
               })
             )
           }
@@ -463,6 +482,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               description: 'Showing activities that include a system value.',
               activities: activitiesWithSystems,
               exportFilename: 'Dashboard_Systems_Covered.xlsx',
+              filter: { kind: 'hasField', field: 'system' },
             })
           }
           onKeyDown={(event) =>
@@ -472,6 +492,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 description: 'Showing activities that include a system value.',
                 activities: activitiesWithSystems,
                 exportFilename: 'Dashboard_Systems_Covered.xlsx',
+                filter: { kind: 'hasField', field: 'system' },
               })
             )
           }
@@ -493,6 +514,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               description: 'Showing activities that include a tag value.',
               activities: activitiesWithTags,
               exportFilename: 'Dashboard_Tags_Used.xlsx',
+              filter: { kind: 'hasField', field: 'tag' },
             })
           }
           onKeyDown={(event) =>
@@ -502,6 +524,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 description: 'Showing activities that include a tag value.',
                 activities: activitiesWithTags,
                 exportFilename: 'Dashboard_Tags_Used.xlsx',
+                filter: { kind: 'hasField', field: 'tag' },
               })
             )
           }
@@ -523,6 +546,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               description: 'Showing activities with performer information across the team.',
               activities: activitiesWithPerformers,
               exportFilename: 'Dashboard_Team_Activities.xlsx',
+              filter: { kind: 'hasField', field: 'performer' },
             })
           }
           onKeyDown={(event) =>
@@ -532,6 +556,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 description: 'Showing activities with performer information across the team.',
                 activities: activitiesWithPerformers,
                 exportFilename: 'Dashboard_Team_Activities.xlsx',
+                filter: { kind: 'hasField', field: 'performer' },
               })
             )
           }
@@ -553,6 +578,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               description: 'Showing activities from the last 7 days.',
               activities: thisWeekActivitiesList,
               exportFilename: 'Dashboard_This_Week_Activities.xlsx',
+              filter: { kind: 'sinceDate', sinceDate: thisWeekSinceDate },
             })
           }
           onKeyDown={(event) =>
@@ -562,6 +588,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 description: 'Showing activities from the last 7 days.',
                 activities: thisWeekActivitiesList,
                 exportFilename: 'Dashboard_This_Week_Activities.xlsx',
+                filter: { kind: 'sinceDate', sinceDate: thisWeekSinceDate },
               })
             )
           }
