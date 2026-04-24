@@ -7,7 +7,7 @@ export type DashboardResultsFilter =
   | { kind: 'all' }
   | { kind: 'performer'; performer: string }
   | { kind: 'performerIn'; performers: string[] }
-  | { kind: 'hasField'; field: 'performer' | 'system' | 'tag' }
+  | { kind: 'hasField'; field: 'performer' | 'system' | 'tag' | 'editedBy' }
   | { kind: 'sinceDate'; sinceDate: string }
   | { kind: 'activityType'; activityType: string }
   | { kind: 'system'; system: string }
@@ -45,6 +45,7 @@ interface DashboardStats {
   activityBySystem: Map<string, number>
   activityByType: Map<string, number>
   recentActivities: Activity[]
+  recentlyEditedActivities: Activity[]
   teamMembersCount: number
   thisWeekActivities: number
 }
@@ -117,12 +118,14 @@ function PieChartCard({
   data,
   total,
   onValueSelect,
+  className = '',
 }: {
   icon: string
   title: string
   data: ChartDatum[]
   total: number
   onValueSelect?: (item: ChartDatum) => void
+  className?: string
 }) {
   const hasData = total > 0 && data.length > 0
 
@@ -154,7 +157,7 @@ function PieChartCard({
   })
 
   return (
-    <section className="dashboard-section dashboard-chart-card">
+    <section className={`dashboard-section dashboard-chart-card ${className}`.trim()}>
       <h3 className="dashboard-section-title">
         <span className="dashboard-section-icon" aria-hidden="true">
           {icon}
@@ -206,23 +209,30 @@ function BarChartCard({
   title,
   data,
   onValueSelect,
+  className = '',
+  controls,
 }: {
   icon: string
   title: string
   data: ChartDatum[]
   onValueSelect?: (item: ChartDatum) => void
+  className?: string
+  controls?: React.ReactNode
 }) {
   const hasData = data.length > 0
   const maxValue = hasData ? data[0].value : 0
 
   return (
-    <section className="dashboard-section dashboard-chart-card">
-      <h3 className="dashboard-section-title">
-        <span className="dashboard-section-icon" aria-hidden="true">
-          {icon}
-        </span>
-        <span>{title}</span>
-      </h3>
+    <section className={`dashboard-section dashboard-chart-card ${className}`.trim()}>
+      <div className="dashboard-chart-card-header">
+        <h3 className="dashboard-section-title">
+          <span className="dashboard-section-icon" aria-hidden="true">
+            {icon}
+          </span>
+          <span>{title}</span>
+        </h3>
+        {controls && <div className="dashboard-chart-card-controls">{controls}</div>}
+      </div>
       {hasData ? (
         <div className="chart-list">
           {data.map((item) => (
@@ -281,10 +291,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
     activityBySystem: new Map<string, number>(),
     activityByType: new Map<string, number>(),
     recentActivities: [],
+    recentlyEditedActivities: [],
     teamMembersCount: 0,
     thisWeekActivities: 0,
   })
   const [editorNames, setEditorNames] = useState<string[]>([])
+  const [topTagsLimit, setTopTagsLimit] = useState<10 | 20 | 30 | 50 | 100>(20)
 
   useEffect(() => {
     let isMounted = true
@@ -332,7 +344,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     let weekCount = 0
 
     activities.forEach((activity) => {
-      activityByPerformer.set(activity.performer, (activityByPerformer.get(activity.performer) || 0) + 1)
+      const normalizedPerformer = String(activity.performer || '').trim()
+
+      if (!normalizedPerformer) {
+        activityByPerformer.set('', (activityByPerformer.get('') || 0) + 1)
+      } else if (normalizedPerformer === 'Other' || editorNames.includes(normalizedPerformer)) {
+        activityByPerformer.set(activity.performer, (activityByPerformer.get(activity.performer) || 0) + 1)
+      }
       activityByTag.set(activity.tag, (activityByTag.get(activity.tag) || 0) + 1)
       activityBySystem.set(activity.system, (activityBySystem.get(activity.system) || 0) + 1)
       activityByType.set(activity.activityType || '', (activityByType.get(activity.activityType || '') || 0) + 1)
@@ -344,6 +362,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     const myActivities = activities.filter((activity) => activity.performer === performerName).length
     const recentActivities = activities.slice(0, 5)
+    const recentlyEditedActivities = activities
+      .filter((activity) => {
+        if (!String(activity.editedBy || '').trim()) {
+          return false
+        }
+
+        const referenceDate = activity.edited_at || activity.created_at || activity.date || ''
+        return referenceDate >= weekAgo
+      })
+      .sort((first, second) => {
+        const firstDate = first.edited_at || first.created_at || first.date || ''
+        const secondDate = second.edited_at || second.created_at || second.date || ''
+        return secondDate.localeCompare(firstDate)
+      })
+      .slice(0, 5)
 
     setStats((current) => ({
       totalActivities: activities.length,
@@ -355,20 +388,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
       activityBySystem,
       activityByType,
       recentActivities,
+      recentlyEditedActivities,
       teamMembersCount: current.teamMembersCount,
       thisWeekActivities: weekCount,
     }))
-  }, [activities, performerName])
+  }, [activities, editorNames, performerName])
 
   const systemChartData = createChartData(stats.activityBySystem)
   const performerChartData = createChartData(stats.activityByPerformer)
   const activityTypeChartData = createActivityTypeChartData(stats.activityByType)
-  const tagChartData = createChartData(stats.activityByTag).slice(0, 20)
+  const tagChartData = createChartData(stats.activityByTag).slice(0, topTagsLimit)
   const thisWeekSinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const myActivitiesList = activities.filter((activity) => activity.performer === performerName)
   const activitiesWithSystems = activities.filter((activity) => Boolean(activity.system))
   const activitiesWithTags = activities.filter((activity) => Boolean(activity.tag))
-  const activitiesWithPerformers = activities.filter((activity) => editorNames.includes(activity.performer || ''))
+  const activitiesWithPerformers = activities.filter((activity) =>
+    activity.performer === 'Other' || editorNames.includes(activity.performer || '')
+  )
+  const recentlyEditedActivities = stats.recentlyEditedActivities
   const thisWeekActivitiesList = activities.filter((activity) => activity.date >= thisWeekSinceDate)
 
   const openActivityResults = (request: DashboardActivityRequest) => {
@@ -559,7 +596,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           onClick={() =>
             openActivityResults({
               title: '👥 Team Members',
-              description: 'Showing activities performed by editors.',
+              description: 'Showing activities performed by team admins, editors, and Other.',
               activities: activitiesWithPerformers,
               exportFilename: 'Dashboard_Team_Activities.xlsx',
               filter: { kind: 'performerIn', performers: editorNames },
@@ -569,7 +606,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             handleDashboardCardKeyDown(event, () =>
               openActivityResults({
                 title: '👥 Team Members',
-                description: 'Showing activities performed by editors.',
+                description: 'Showing activities performed by team admins, editors, and Other.',
                 activities: activitiesWithPerformers,
                 exportFilename: 'Dashboard_Team_Activities.xlsx',
                 filter: { kind: 'performerIn', performers: editorNames },
@@ -617,6 +654,37 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <p className="stat-value">{stats.thisWeekActivities}</p>
           </div>
         </div>
+        <div
+          className={`stat-card ${onOpenActivityResults ? 'dashboard-card-actionable' : ''}`}
+          onClick={() =>
+            openActivityResults({
+              title: 'Recently Edited Activities',
+              description: 'Showing activities edited during the last 7 days.',
+              activities: recentlyEditedActivities,
+              exportFilename: 'Dashboard_Recently_Edited_Activities.xlsx',
+              filter: { kind: 'hasField', field: 'editedBy' },
+            })
+          }
+          onKeyDown={(event) =>
+            handleDashboardCardKeyDown(event, () =>
+              openActivityResults({
+                title: 'Recently Edited Activities',
+                description: 'Showing activities edited during the last 7 days.',
+                activities: recentlyEditedActivities,
+                exportFilename: 'Dashboard_Recently_Edited_Activities.xlsx',
+                filter: { kind: 'hasField', field: 'editedBy' },
+              })
+            )
+          }
+          role={onOpenActivityResults ? 'button' : undefined}
+          tabIndex={onOpenActivityResults ? 0 : undefined}
+        >
+          <div className="stat-icon">✎</div>
+          <div className="stat-content">
+            <h3>Recently Edited</h3>
+            <p className="stat-value">{recentlyEditedActivities.length}</p>
+          </div>
+        </div>
       </div>
 
       <div className="dashboard-chart-grid">
@@ -640,12 +708,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
           data={systemChartData}
           total={stats.totalActivities}
           onValueSelect={openSystemResults}
+          className="system-chart-card"
         />
         <BarChartCard
           icon="🏷️"
           title="Top Tags"
           data={tagChartData}
           onValueSelect={openTagResults}
+          className="top-tags-chart-card"
+          controls={
+            <label className="dashboard-chart-select">
+              <span>Show</span>
+              <select
+                value={topTagsLimit}
+                onChange={(event) => setTopTagsLimit(Number(event.target.value) as 10 | 20 | 30 | 50 | 100)}
+              >
+                {[10, 20, 30, 50, 100].map((option) => (
+                  <option key={option} value={option}>
+                    Top {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
         />
       </div>
 
@@ -669,6 +754,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           />
         </div>
       )}
+
     </div>
   )
 }

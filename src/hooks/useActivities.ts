@@ -76,6 +76,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
             action: activity.action,
             comments: activity.comments,
             editedBy: currentUserName || undefined,
+            edited_at: new Date().toISOString(),
           }
 
           await updateActivity(options.editingId, updateData, activeTeam)

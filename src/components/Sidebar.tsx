@@ -166,7 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title={activeTeam?.name || 'Select team'}
           >
             <span className="sidebar-team-avatar">{isExpanded ? activeTeamInitials : activeTeamInitials}</span>
-            {isExpanded && (
+            {(isExpanded || isMobileViewport) && (
               <>
                 <span className="sidebar-team-name">{activeTeam?.name || 'Select team'}</span>
                 <span className="sidebar-team-caret" aria-hidden="true">⌄</span>

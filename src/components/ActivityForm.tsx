@@ -237,7 +237,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
                     required
                   />
                   <small className="form-hint">
-                    Added to comments as <code>[Name]</code>.
+                    Added to comments as <code>[Performer Name]</code>.
                   </small>
                 </div>
               )}

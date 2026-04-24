@@ -98,6 +98,10 @@ function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilt
     return false
   }
 
+  if (filters.hasMoc && !String(activity.comments || '').toLowerCase().includes('{moc}')) {
+    return false
+  }
+
   if (filters.keyword) {
     const keyword = filters.keyword.toLowerCase()
     const searchableFields = [

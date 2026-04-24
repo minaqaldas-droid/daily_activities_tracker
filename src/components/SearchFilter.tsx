@@ -23,6 +23,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
   const [system, setSystem] = useState('')
   const [activityType, setActivityType] = useState<ActivityTypeValue | ''>('')
   const [tag, setTag] = useState('')
+  const [hasMoc, setHasMoc] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -72,6 +73,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
       tag: tag || undefined,
       system: system || undefined,
       activityType: activityType || undefined,
+      hasMoc: hasMoc || undefined,
     }
 
     if (dateMode === 'single') {
@@ -95,12 +97,13 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
     setSystem('')
     setActivityType('')
     setTag('')
+    setHasMoc(false)
     setDateMode('all')
     await onSearch({})
   }
 
   const hasActiveFilters = Boolean(
-    keyword || singleDate || startDate || endDate || performer || system || activityType || tag
+    keyword || singleDate || startDate || endDate || performer || system || activityType || tag || hasMoc
   )
 
   return (
@@ -197,6 +200,19 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                 placeholder="Search tag..."
                 disabled={isLoading}
               />
+            </div>
+
+            <div className="form-group form-group-inline-checkbox moc-inline-cell">
+              <div className="moc-inline-control">
+                <span className="moc-inline-title">MOC Activity</span>
+                <input
+                  type="checkbox"
+                  checked={hasMoc}
+                  onChange={(event) => setHasMoc(event.target.checked)}
+                  disabled={isLoading}
+                  aria-label="Filter MOC Activity"
+                />
+              </div>
             </div>
           </div>
         </section>

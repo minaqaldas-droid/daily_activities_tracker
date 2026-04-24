@@ -40,6 +40,7 @@ export interface Activity {
   comments: string
   editedBy?: string | null
   created_at?: string
+  edited_at?: string | null
 }
 
 export type UserRole = 'admin' | 'editor' | 'viewer'
@@ -104,6 +105,7 @@ export interface SearchFilters {
   tag?: string
   system?: string
   keyword?: string
+  hasMoc?: boolean
 }
 
 export interface AuthActionResult {
@@ -137,6 +139,7 @@ type UserProfileRow = {
   is_approved?: boolean | null
   approved_at?: string | null
   created_at?: string
+  last_sign_in_at?: string | null
 }
 
 export type FeatureKey =
@@ -240,6 +243,17 @@ function isTeamSchemaMissingError(error: unknown) {
       message.includes('team_activities') ||
       message.includes('team_settings') ||
       message.includes('super_admins')
+  )
+}
+
+function isMissingColumnError(error: unknown, columnName: string) {
+  const maybeError = error as { code?: string; message?: string } | undefined
+  const message = maybeError?.message || ''
+
+  return Boolean(
+    maybeError?.code === '42703' ||
+      maybeError?.code === 'PGRST204' ||
+      message.toLowerCase().includes(columnName.toLowerCase())
   )
 }
 
@@ -660,6 +674,17 @@ async function syncUserProfile(authUser: SupabaseAuthUser) {
   )
 }
 
+async function recordUserSignIn(userId: string) {
+  const { error } = await supabase
+    .from('users')
+    .update({ last_sign_in_at: new Date().toISOString() })
+    .eq('id', userId)
+
+  if (error && !isMissingColumnError(error, 'last_sign_in_at')) {
+    throw error
+  }
+}
+
 function getFormattedActivity(activity: Activity) {
   return {
     ...activity,
@@ -682,6 +707,7 @@ function normalizeActivity(activity: Partial<Activity>): Activity {
     comments: activity.comments ?? '',
     editedBy: activity.editedBy ?? null,
     created_at: activity.created_at,
+    edited_at: activity.edited_at ?? null,
   }
 }
 
@@ -853,19 +879,35 @@ export async function createActivities(activities: Activity[], team?: Team | nul
 
 export async function updateActivity(id: string, activity: Partial<Activity>, team?: Team | null) {
   try {
+    const updatePayload = {
+      ...activity,
+      comments: activity.comments ?? '',
+    }
+
     if (!shouldUseLegacyTables(team)) {
       const activeTeam = getActiveTeamOrLegacy(team)
       const { data, error } = await supabase
         .from('team_activities')
-        .update({
-          ...activity,
-          comments: activity.comments ?? '',
-        })
+        .update(updatePayload)
         .eq('id', id)
         .eq('team_id', activeTeam.id)
         .select()
 
       if (error) {
+        if ('edited_at' in updatePayload && isMissingColumnError(error, 'edited_at')) {
+          const { edited_at: _editedAt, ...fallbackPayload } = updatePayload
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('team_activities')
+            .update(fallbackPayload)
+            .eq('id', id)
+            .eq('team_id', activeTeam.id)
+            .select()
+
+          if (!fallbackError) {
+            return fallbackData?.[0] ? normalizeActivity(fallbackData[0] as Partial<Activity>) : undefined
+          }
+        }
+
         const errorMessage = error.message || JSON.stringify(error)
         throw new Error(`Update failed: ${errorMessage}`)
       }
@@ -875,14 +917,24 @@ export async function updateActivity(id: string, activity: Partial<Activity>, te
 
     const { data, error } = await supabase
       .from('activities')
-      .update({
-        ...activity,
-        comments: activity.comments ?? '',
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
 
     if (error) {
+      if ('edited_at' in updatePayload && isMissingColumnError(error, 'edited_at')) {
+        const { edited_at: _editedAt, ...fallbackPayload } = updatePayload
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('activities')
+          .update(fallbackPayload)
+          .eq('id', id)
+          .select()
+
+        if (!fallbackError) {
+          return fallbackData?.[0] ? normalizeActivity(fallbackData[0] as Partial<Activity>) : undefined
+        }
+      }
+
       const errorMessage = error.message || JSON.stringify(error)
       throw new Error(`Update failed: ${errorMessage}`)
     }
@@ -986,6 +1038,8 @@ export async function login(email: string, password: string) {
       throw new Error(getPendingApprovalMessage())
     }
 
+    await recordUserSignIn(data.user.id)
+
     return profile
   } catch (error) {
     console.error('Error logging in:', error)
@@ -1021,31 +1075,54 @@ export async function getUsers() {
 
 export async function getEditors(team?: Team | null) {
   try {
+    let superAdminIds = new Set<string>()
+    try {
+      const [{ data: superAdmins, error: superAdminError }, { data: superAdminUsers, error: superAdminUsersError }] =
+        await Promise.all([
+          supabase.from('super_admins').select('user_id'),
+          supabase.from('users').select('id').eq('role', 'superadmin'),
+        ])
+
+      if (superAdminError) throw superAdminError
+      if (superAdminUsersError) throw superAdminUsersError
+
+      superAdminIds = new Set([
+        ...((superAdmins || []) as Array<{ user_id: string }>).map((row) => row.user_id),
+        ...((superAdminUsers || []) as Array<{ id: string }>).map((row) => row.id),
+      ])
+    } catch (error) {
+      if (!isTeamSchemaMissingError(error)) {
+        throw error
+      }
+    }
+
     if (team?.id && !shouldUseLegacyTables(team)) {
       const { data, error } = await supabase
         .from('team_memberships')
-        .select('user_id, user_name')
+        .select('user_id, user_name, role')
         .eq('team_id', team.id)
-        .eq('role', 'editor')
+        .in('role', ['editor', 'admin'])
         .order('user_name', { ascending: true })
 
       if (error) throw error
 
-      return ((data || []) as Array<{ user_id: string; user_name: string }>).map((membership) => ({
-        id: membership.user_id,
-        name: membership.user_name,
-        email: '',
-      }))
+      return ((data || []) as Array<{ user_id: string; user_name: string }>)
+        .filter((membership) => !superAdminIds.has(membership.user_id))
+        .map((membership) => ({
+          id: membership.user_id,
+          name: membership.user_name,
+          email: '',
+        }))
     }
 
     const { data, error } = await supabase
       .from('users')
       .select('id, email, name')
-      .eq('role', 'editor')
+      .in('role', ['editor', 'admin'])
       .order('name', { ascending: true })
 
     if (error) throw error
-    return data || []
+    return (data || []).filter((user) => !superAdminIds.has(user.id))
   } catch (error) {
     console.error('Error fetching editors:', error)
     throw error
@@ -1312,25 +1389,7 @@ export async function getUsersCount() {
 }
 
 export async function getEditorsCount(team?: Team | null) {
-  const query =
-    team?.id && !shouldUseLegacyTables(team)
-      ? supabase
-          .from('team_memberships')
-          .select('user_id', { count: 'exact', head: true })
-          .eq('team_id', team.id)
-          .eq('role', 'editor')
-      : supabase
-          .from('users')
-          .select('id', { count: 'exact', head: true })
-          .eq('role', 'editor')
-
-  const { count, error } = await query
-
-  if (error) {
-    throw error
-  }
-
-  return count || 0
+  return (await getEditors(team)).length
 }
 
 export async function getManagedTeams(): Promise<ManagedTeam[]> {
@@ -1711,6 +1770,10 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
       query = query.eq('activityType', filters.activityType)
     }
 
+    if (filters.hasMoc) {
+      query = query.ilike('comments', '%{MOC}%')
+    }
+
     const data = await fetchAllActivitiesBatched(() =>
       query
         .order('date', { ascending: false })
@@ -1734,6 +1797,10 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
           activity.comments ?? '',
         ].some((field) => String(field).toLowerCase().includes(keyword))
       )
+    }
+
+    if (filters.hasMoc) {
+      results = results.filter((activity) => String(activity.comments || '').toLowerCase().includes('{moc}'))
     }
 
     return results
