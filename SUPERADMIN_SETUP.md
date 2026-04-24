@@ -19,7 +19,7 @@ This script now:
 - Restricts settings updates to admins
 
 ### 2. Add the safe teams layer
-Execute [MIGRATION_SUPERADMIN_TEAMS_SAFE.sql](./MIGRATION_SUPERADMIN_TEAMS_SAFE.sql) in Supabase SQL Editor.
+Execute [MIGRATION_SUPERADMIN_TEAMS_SAFE.sql](./migration/MIGRATION_SUPERADMIN_TEAMS_SAFE.sql) in Supabase SQL Editor.
 
 This migration is additive only:
 - It does not alter `public.activities`, `public.users`, or `public.settings`
@@ -46,9 +46,9 @@ ON CONFLICT (user_id) DO NOTHING;
 ## Existing Projects
 If your app already uses the old `users(email, password, ...)` table:
 
-1. Run [MIGRATION_AUTH_HARDENING.sql](./MIGRATION_AUTH_HARDENING.sql)
+1. Run [MIGRATION_AUTH_HARDENING.sql](./migration/MIGRATION_AUTH_HARDENING.sql)
 2. Run [SUPABASE_SETUP.sql](./SUPABASE_SETUP.sql)
-3. Run [MIGRATION_SUPERADMIN_TEAMS_SAFE.sql](./MIGRATION_SUPERADMIN_TEAMS_SAFE.sql)
+3. Run [MIGRATION_SUPERADMIN_TEAMS_SAFE.sql](./migration/MIGRATION_SUPERADMIN_TEAMS_SAFE.sql)
 4. Ask users to create or reset passwords through Supabase Auth
 
 ## Notes
@@ -59,4 +59,4 @@ If your app already uses the old `users(email, password, ...)` table:
 - The app no longer stores passwords in the `users` table.
 - Email/password changes are handled by Supabase Auth.
 - To enable admin email notifications for new signups, set `VITE_ADMIN_APPROVAL_WEBHOOK_URL` in your frontend environment and point it to an endpoint (Edge Function or webhook) that sends email to admins.
-- Run `MIGRATION_USER_APPROVAL_WORKFLOW.sql` so new accounts stay pending until an admin approves them from User Management.
+- Run `migration/MIGRATION_USER_APPROVAL_WORKFLOW.sql` so new accounts stay pending until an admin approves them from User Management.

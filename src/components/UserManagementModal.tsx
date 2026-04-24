@@ -7,10 +7,12 @@ import {
   type UserRole,
   createManagedTeam,
   deleteManagedUser,
+  deleteManagedTeam,
   getManagedUsers,
   getManagedTeams,
   getTeamManagedUsers,
   setUserTeamMembership,
+  updateManagedTeam,
   updateManagedUser,
 } from '../supabaseClient'
 
@@ -18,6 +20,7 @@ interface UserManagementModalProps {
   currentUser: User
   activeTeam?: Team | null
   onClose: () => void
+  onTeamsChanged?: (deletedTeamId?: string) => void
 }
 
 type ManagedUserDraft = TeamManagedUser
@@ -54,11 +57,12 @@ function haveSameTeamAssignments(first: ManagedUserDraft, second: ManagedUserDra
   })
 }
 
-export const UserManagementModal: React.FC<UserManagementModalProps> = ({ currentUser, activeTeam, onClose }) => {
+export const UserManagementModal: React.FC<UserManagementModalProps> = ({ currentUser, activeTeam, onClose, onTeamsChanged }) => {
   const [users, setUsers] = useState<ManagedUserDraft[]>([])
   const [draftUsers, setDraftUsers] = useState<ManagedUserDraft[]>([])
   const [teams, setTeams] = useState<ManagedTeam[]>([])
   const [newTeamName, setNewTeamName] = useState('')
+  const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({})
   const [deletedUserIds, setDeletedUserIds] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
@@ -95,6 +99,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ curren
         }
       })
       setTeams(teamData)
+      setTeamNameDrafts(
+        teamData.reduce<Record<string, string>>((drafts, team) => {
+          drafts[team.id] = team.name
+          return drafts
+        }, {})
+      )
       setUsers(normalizedUsers)
       setDraftUsers(normalizedUsers)
       setDeletedUserIds(new Set())
@@ -238,9 +248,67 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ curren
       await createManagedTeam({ name: newTeamName })
       setNewTeamName('')
       await loadUsers()
+      onTeamsChanged?.()
       setSuccess('Team created successfully.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create team.')
+    } finally {
+      setIsMutating(false)
+    }
+  }
+
+  const handleDeleteTeam = async (team: ManagedTeam) => {
+    if (team.slug === 'automation') {
+      setError('Automation is the primary migrated team and cannot be deleted.')
+      return
+    }
+
+    const confirmed = confirm(
+      `Delete team "${team.name}"? This will delete its team activities, settings, and memberships from the unified team tables.`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setError('')
+      setSuccess('')
+      setIsMutating(true)
+      await deleteManagedTeam(team.id)
+      await loadUsers()
+      onTeamsChanged?.(team.id)
+      setSuccess(`Team "${team.name}" deleted successfully.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete team.')
+    } finally {
+      setIsMutating(false)
+    }
+  }
+
+  const handleRenameTeam = async (team: ManagedTeam) => {
+    const nextName = (teamNameDrafts[team.id] || '').trim()
+
+    if (!nextName) {
+      setError('Team name is required.')
+      return
+    }
+
+    if (nextName === team.name) {
+      setSuccess('No team name changes to save.')
+      return
+    }
+
+    try {
+      setError('')
+      setSuccess('')
+      setIsMutating(true)
+      await updateManagedTeam(team.id, { name: nextName })
+      await loadUsers()
+      onTeamsChanged?.()
+      setSuccess(`Team "${team.name}" renamed to "${nextName}".`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename team.')
     } finally {
       setIsMutating(false)
     }
@@ -326,7 +394,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ curren
 
       setError(
         isRoleConstraintError
-          ? 'Failed to save settings. Database role constraints are outdated. Run MIGRATION_ROLE_MODEL_EDITOR_VIEWER.sql in Supabase SQL Editor.'
+          ? 'Failed to save settings. Database role constraints are outdated. Run migration/MIGRATION_ROLE_MODEL_EDITOR_VIEWER.sql in Supabase SQL Editor.'
           : rawMessage
       )
     } finally {
@@ -362,7 +430,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ curren
             <div className="team-management-header">
               <div>
                 <h3>Teams</h3>
-                <p>Automation, Process, and Instrumentation all use the unified team data model.</p>
               </div>
               <div className="team-create-controls">
                 <input
@@ -384,17 +451,47 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ curren
             </div>
             <div className="team-chip-list">
               {teams.map((team) => (
-                <span key={team.id} className="team-chip">
-                  {team.name}
+                <div key={team.id} className="team-chip">
+                  <input
+                    type="text"
+                    value={teamNameDrafts[team.id] ?? team.name}
+                    onChange={(event) =>
+                      setTeamNameDrafts((previous) => ({
+                        ...previous,
+                        [team.id]: event.target.value,
+                      }))
+                    }
+                    disabled={isMutating}
+                    aria-label={`Team name for ${team.name}`}
+                  />
                   <small>{`${team.member_count} users`}</small>
-                </span>
+                  <button
+                    type="button"
+                    className="team-chip-save"
+                    onClick={() => void handleRenameTeam(team)}
+                    disabled={isMutating || (teamNameDrafts[team.id] ?? team.name).trim() === team.name}
+                    title={`Save ${team.name} name`}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="team-chip-delete"
+                    onClick={() => void handleDeleteTeam(team)}
+                    disabled={team.slug === 'automation' || isMutating}
+                    title={team.slug === 'automation' ? 'Automation cannot be deleted' : `Delete ${team.name}`}
+                    aria-label={`Delete ${team.name}`}
+                  >
+                    Delete
+                  </button>
+                </div>
               ))}
             </div>
           </div>
         )}
 
         <div className="table-container">
-          <table className="activities-table">
+          <table className="activities-table user-management-table">
             <thead>
               <tr>
                 <th>ID</th>

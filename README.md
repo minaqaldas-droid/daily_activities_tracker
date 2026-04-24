@@ -38,7 +38,7 @@ Run [SUPABASE_SETUP.sql](./SUPABASE_SETUP.sql) in the Supabase SQL Editor.
 
 If you are upgrading an older installation that used the legacy `users(email, password, ...)` table:
 
-1. Run [MIGRATION_AUTH_HARDENING.sql](./MIGRATION_AUTH_HARDENING.sql)
+1. Run [MIGRATION_AUTH_HARDENING.sql](./migration/MIGRATION_AUTH_HARDENING.sql)
 2. Run [SUPABASE_SETUP.sql](./SUPABASE_SETUP.sql)
 3. Have users create or reset their passwords through Supabase Auth
 
@@ -56,7 +56,7 @@ npm run build
 After the main schema is installed, run the additive team migration:
 
 ```sql
--- Run MIGRATION_SUPERADMIN_TEAMS_SAFE.sql in Supabase SQL Editor.
+-- Run migration/MIGRATION_SUPERADMIN_TEAMS_SAFE.sql in Supabase SQL Editor.
 ```
 
 This keeps the old Automation tables in place, copies Automation activities/settings/users roles into the unified team model, and makes Automation, Process, and Instrumentation all run through team-scoped tables with RLS.

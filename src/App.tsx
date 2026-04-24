@@ -111,7 +111,6 @@ function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilt
       activity.problem,
       activity.action,
       activity.comments || '',
-      activity.editedBy || '',
     ]
     const hasKeywordMatch = searchableFields.some((field) =>
       String(field || '')
@@ -218,6 +217,7 @@ function App() {
   })
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false)
+  const [showBackToTop, setShowBackToTop] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -328,6 +328,20 @@ function App() {
       return
     }
 
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 360)
+    }
+
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') {
         return
@@ -406,6 +420,14 @@ function App() {
   const canExport = hasPermission(appUser, 'export')
   const canEditAction = hasPermission(appUser, 'edit_action')
   const canDeleteAction = hasPermission(appUser, 'delete_action')
+
+  const handleBackToTop = () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const buildSearchResultsPopup = (
     sourceActivities: Activity[],
@@ -587,15 +609,9 @@ function App() {
     })
   }
 
-  const handleSidebarHoverExtend = () => {
+  const handleSidebarToggle = () => {
     if (!isMobileViewport) {
-      setIsSidebarExpanded(true)
-    }
-  }
-
-  const handleSidebarHoverLeave = () => {
-    if (!isMobileViewport) {
-      setIsSidebarExpanded(false)
+      setIsSidebarExpanded((value) => !value)
     }
   }
 
@@ -689,8 +705,7 @@ function App() {
         isExpanded={isSidebarExpanded}
         isMobileViewport={isMobileViewport}
         isMobileOpen={isMobileSidebarOpen}
-        onHoverExtend={handleSidebarHoverExtend}
-        onHoverLeave={handleSidebarHoverLeave}
+        onToggleExpanded={handleSidebarToggle}
         onMobileClose={() => setIsMobileSidebarOpen(false)}
         onSettingsClick={() => {
           setIsMobileSidebarOpen(false)
@@ -926,6 +941,29 @@ function App() {
           <UserManagementModal
             currentUser={appUser}
             activeTeam={effectiveActiveTeam}
+            onTeamsChanged={(deletedTeamId) => {
+              if (deletedTeamId) {
+                setCurrentUser((previous) => {
+                  if (!previous) {
+                    return previous
+                  }
+
+                  const nextMemberships =
+                    previous.team_memberships?.filter((membership) => membership.team.id !== deletedTeamId) || []
+                  const nextActiveTeam =
+                    previous.active_team?.id === deletedTeamId
+                      ? nextMemberships[0]?.team
+                      : previous.active_team
+
+                  return {
+                    ...previous,
+                    active_team: nextActiveTeam,
+                    team_memberships: nextMemberships,
+                  }
+                })
+                setActiveTeam((previous) => (previous?.id === deletedTeamId ? null : previous))
+              }
+            }}
             onClose={() => setShowUserManagement(false)}
           />
         )}
@@ -958,6 +996,16 @@ function App() {
             </div>
           </div>
         )}
+
+        <button
+          type="button"
+          className={`back-to-top-button ${showBackToTop ? 'visible' : ''}`}
+          onClick={handleBackToTop}
+          aria-label="Back to top"
+          title="Back to top"
+        >
+          ↑
+        </button>
 
         <ActivityResultsPopup
           isOpen={Boolean(resultsPopup)}

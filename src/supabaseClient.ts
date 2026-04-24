@@ -1414,6 +1414,49 @@ export async function createManagedTeam(input: { name: string; slug?: string }) 
   return normalizeTeam(data)
 }
 
+export async function updateManagedTeam(teamId: string, input: { name: string }) {
+  const name = input.name.trim()
+
+  if (!name) {
+    throw new Error('Team name is required.')
+  }
+
+  const { data, error } = await supabase
+    .from('app_teams')
+    .update({ name })
+    .eq('id', teamId)
+    .select('id, name, slug, uses_legacy_tables, is_active, created_at')
+    .single<TeamRow>()
+
+  if (error) {
+    throw error
+  }
+
+  return normalizeTeam(data)
+}
+
+export async function deleteManagedTeam(teamId: string) {
+  const { data: team, error: teamError } = await supabase
+    .from('app_teams')
+    .select('id, name, slug')
+    .eq('id', teamId)
+    .single<{ id: string; name: string; slug: string }>()
+
+  if (teamError) {
+    throw teamError
+  }
+
+  if (team.slug === 'automation') {
+    throw new Error('Automation is the primary migrated team and cannot be deleted.')
+  }
+
+  const { error } = await supabase.from('app_teams').delete().eq('id', teamId)
+
+  if (error) {
+    throw error
+  }
+}
+
 export async function getManagedUsers() {
   const { data, error } = await supabase
     .from('users')
@@ -1689,7 +1732,6 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
           activity.problem,
           activity.action,
           activity.comments ?? '',
-          activity.editedBy ?? '',
         ].some((field) => String(field).toLowerCase().includes(keyword))
       )
     }

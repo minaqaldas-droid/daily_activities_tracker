@@ -11,8 +11,7 @@ interface SidebarProps {
   isExpanded: boolean
   isMobileViewport: boolean
   isMobileOpen: boolean
-  onHoverExtend: () => void
-  onHoverLeave: () => void
+  onToggleExpanded: () => void
   onMobileClose: () => void
   onSettingsClick: () => void
   onAdminClick: () => void
@@ -42,8 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isExpanded,
   isMobileViewport,
   isMobileOpen,
-  onHoverExtend,
-  onHoverLeave,
+  onToggleExpanded,
   onMobileClose,
   onSettingsClick,
   onAdminClick,
@@ -56,7 +54,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const canDashboard = hasPermission(currentUser, 'dashboard')
   const canSearch = hasPermission(currentUser, 'search')
   const [isAvatarBroken, setIsAvatarBroken] = useState(false)
-  const hoverExpandTimerRef = useRef<number | null>(null)
+  const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false)
+  const teamMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setIsAvatarBroken(false)
@@ -65,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const showAvatarImage = Boolean(currentUser.avatar_url && !isAvatarBroken)
   const userInitial = currentUser.name.trim().charAt(0).toUpperCase() || 'U'
   const activeTeam = teams.find((team) => team.id === activeTeamId) || currentUser.active_team
+  const activeTeamInitials = (activeTeam?.name || 'TM').trim().slice(0, 2).toUpperCase()
   const handleViewSelect = (view: NavView) => {
     onViewChange(view)
 
@@ -97,40 +97,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onLogout()
   }
 
-  const startHoverExpandTimer = () => {
-    if (isMobileViewport || isExpanded) {
-      return
-    }
-
-    if (hoverExpandTimerRef.current) {
-      window.clearTimeout(hoverExpandTimerRef.current)
-    }
-
-    hoverExpandTimerRef.current = window.setTimeout(() => {
-      onHoverExtend()
-      hoverExpandTimerRef.current = null
-    }, 3000)
-  }
-
-  const clearHoverExpandTimer = () => {
-    if (hoverExpandTimerRef.current) {
-      window.clearTimeout(hoverExpandTimerRef.current)
-      hoverExpandTimerRef.current = null
-    }
-  }
-
-  const handleSidebarMouseLeave = () => {
-    clearHoverExpandTimer()
-
-    if (!isMobileViewport) {
-      onHoverLeave()
-    }
-  }
-
   useEffect(() => {
-    return () => {
-      clearHoverExpandTimer()
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!teamMenuRef.current?.contains(event.target as Node)) {
+        setIsTeamMenuOpen(false)
+      }
     }
+
+    document.addEventListener('mousedown', handleDocumentClick)
+    return () => document.removeEventListener('mousedown', handleDocumentClick)
   }, [])
 
   return (
@@ -139,8 +114,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       className={`sidebar ${isExpanded ? 'expanded' : 'collapsed'} ${isMobileOpen ? 'mobile-visible' : ''}`}
       aria-label="Primary navigation"
       aria-hidden={isMobileViewport ? !isMobileOpen : undefined}
-      onMouseEnter={startHoverExpandTimer}
-      onMouseLeave={handleSidebarMouseLeave}
     >
       <div className="sidebar-mobile-topbar">
         <div className="sidebar-mobile-copy">
@@ -156,8 +129,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className="sidebar-header"
         title={`${currentUser.name} (${currentUser.email})${isAdmin ? ' - Admin' : ''}`}
       >
-        <div className={`user-avatar ${showAvatarImage ? 'has-image' : ''}`} aria-hidden="true">
-          {showAvatarImage ? <img src={currentUser.avatar_url} alt="" onError={() => setIsAvatarBroken(true)} /> : userInitial}
+        <div className="sidebar-user-control">
+          <div className={`user-avatar ${showAvatarImage ? 'has-image' : ''}`} aria-hidden="true">
+            {showAvatarImage ? <img src={currentUser.avatar_url} alt="" onError={() => setIsAvatarBroken(true)} /> : userInitial}
+          </div>
+          {!isMobileViewport && (
+            <button
+              type="button"
+              className="sidebar-mini-toggle"
+              onClick={onToggleExpanded}
+              aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+              title={isExpanded ? 'Collapse' : 'Expand'}
+            >
+              {isExpanded ? '‹' : '›'}
+            </button>
+          )}
         </div>
         <div className="user-info">
           <p className="user-name">{currentUser.name}</p>
@@ -169,19 +155,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {teams.length > 1 && (
-        <div className="sidebar-team-switcher">
-          <label htmlFor="sidebar-team-select">Team</label>
-          <select
-            id="sidebar-team-select"
-            value={activeTeamId}
-            onChange={(event) => onTeamChange?.(event.target.value)}
+        <div className="sidebar-team-switcher" ref={teamMenuRef}>
+          {isExpanded && <label>Team</label>}
+          <button
+            type="button"
+            className="sidebar-team-button"
+            onClick={() => setIsTeamMenuOpen((value) => !value)}
+            aria-haspopup="listbox"
+            aria-expanded={isTeamMenuOpen}
+            title={activeTeam?.name || 'Select team'}
           >
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
+            <span className="sidebar-team-avatar">{isExpanded ? activeTeamInitials : activeTeamInitials}</span>
+            {isExpanded && (
+              <>
+                <span className="sidebar-team-name">{activeTeam?.name || 'Select team'}</span>
+                <span className="sidebar-team-caret" aria-hidden="true">⌄</span>
+              </>
+            )}
+          </button>
+          {isTeamMenuOpen && (
+            <div className="sidebar-team-menu" role="listbox" aria-label="Select team">
+              {teams.map((team) => {
+                const initials = team.name.trim().slice(0, 2).toUpperCase()
+                const isActive = team.id === activeTeamId
+
+                return (
+                  <button
+                    key={team.id}
+                    type="button"
+                    className={`sidebar-team-option ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      onTeamChange?.(team.id)
+                      setIsTeamMenuOpen(false)
+                      if (isMobileViewport) {
+                        onMobileClose()
+                      }
+                    }}
+                    role="option"
+                    aria-selected={isActive}
+                  >
+                    <span className="sidebar-team-avatar">{initials}</span>
+                    <span className="sidebar-team-option-copy">
+                      <span>{team.name}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

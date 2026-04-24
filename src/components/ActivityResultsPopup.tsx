@@ -39,7 +39,6 @@ function matchesKeyword(activity: Activity, keyword: string) {
     activity.problem,
     activity.action,
     activity.comments || '',
-    activity.editedBy || '',
   ].some((value) => String(value).toLowerCase().includes(normalizedKeyword))
 }
 
