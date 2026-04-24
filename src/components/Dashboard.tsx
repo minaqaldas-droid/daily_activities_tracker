@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
-import { type Activity, getEditors, getEditorsCount } from '../supabaseClient'
+import { type Activity, type Team, getEditors, getEditorsCount } from '../supabaseClient'
 import { ActivityList } from './ActivityList'
 
 export type DashboardResultsFilter =
@@ -29,6 +29,7 @@ interface DashboardProps {
   isLoading?: boolean
   canEdit?: boolean
   canDelete?: boolean
+  activeTeam?: Team | null
   onEditDenied?: () => void
   onDeleteDenied?: () => void
   onOpenActivityResults?: (request: DashboardActivityRequest) => void
@@ -265,6 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   isLoading = false,
   canEdit = true,
   canDelete = true,
+  activeTeam,
   onEditDenied,
   onDeleteDenied,
   onOpenActivityResults,
@@ -287,7 +289,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   useEffect(() => {
     let isMounted = true
 
-    void getEditorsCount()
+    void getEditorsCount(activeTeam)
       .then((count) => {
         if (!isMounted) {
           return
@@ -302,7 +304,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         console.error('Failed to load editors count:', error)
       })
 
-    void getEditors()
+    void getEditors(activeTeam)
       .then((editors) => {
         if (!isMounted) {
           return
@@ -317,7 +319,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [activeTeam])
 
   useEffect(() => {
     const activityByPerformer = new Map<string, number>()

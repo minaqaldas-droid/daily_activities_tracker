@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { type Settings, type User, updateSettings, uploadBrandingAsset } from '../supabaseClient'
+import { type Settings, type Team, type User, updateSettings, uploadBrandingAsset } from '../supabaseClient'
 
 interface AdminPanelProps {
   user: User
+  activeTeam?: Team | null
   currentSettings: Settings
   onClose: () => void
   onSettingsUpdate: (settings: Settings) => void
@@ -19,6 +20,7 @@ function isValidImageFile(file: File) {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   user,
+  activeTeam,
   currentSettings,
   onClose,
   onSettingsUpdate,
@@ -128,7 +130,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           sidebar_font_family: sidebarFontFamily.trim(),
           sidebar_font_size: sidebarFontSize.trim(),
         },
-        user.id
+        user.id,
+        activeTeam
       )
 
       if (updatedSettings) {
@@ -146,7 +149,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     <div className="modal-overlay">
       <div className="settings-modal admin-settings-modal">
         <div className="modal-header">
-          <h2>Admin Settings</h2>
+          <h2>{user.is_superadmin ? 'Super Admin Settings' : 'Admin Settings'}</h2>
           <button className="modal-close" onClick={onClose}>
             ×
           </button>
@@ -312,9 +315,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <button type="submit" className="btn btn-primary" disabled={isSubmitting || isLoading}>
               {isSubmitting ? 'Saving...' : 'Save Settings'}
             </button>
-            <button type="button" className="btn btn-user-management" onClick={onOpenUserManagement}>
-              Open User Management
-            </button>
+            {user.is_superadmin && (
+              <button type="button" className="btn btn-user-management" onClick={onOpenUserManagement}>
+                Open User Management
+              </button>
+            )}
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting || isLoading}>
               Close
             </button>

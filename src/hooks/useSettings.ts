@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { type Settings, getSettings } from '../supabaseClient'
+import { type Settings, type Team, getSettings } from '../supabaseClient'
 
 const DEFAULT_SETTINGS: Settings = {
   webapp_name: 'Daily Activities Tracker',
@@ -156,14 +156,14 @@ function getThemeTokens(primaryColor: string) {
   }
 }
 
-export function useSettings(isEnabled: boolean, preferredPrimaryColor = '') {
+export function useSettings(isEnabled: boolean, preferredPrimaryColor = '', activeTeam?: Team | null) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   const loadSettings = useCallback(async () => {
-    const appSettings = await getSettings()
+    const appSettings = await getSettings(activeTeam)
     setSettings(appSettings)
     return appSettings
-  }, [])
+  }, [activeTeam])
 
   useEffect(() => {
     if (!isEnabled) {

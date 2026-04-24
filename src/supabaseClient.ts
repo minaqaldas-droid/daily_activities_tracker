@@ -44,11 +44,31 @@ export interface Activity {
 
 export type UserRole = 'admin' | 'editor' | 'viewer'
 
+export interface Team {
+  id: string
+  name: string
+  slug: string
+  uses_legacy_tables: boolean
+  is_active?: boolean
+  created_at?: string
+}
+
+export interface TeamMembership {
+  team: Team
+  role: UserRole
+  permissions: FeaturePermissions
+  is_default: boolean
+  created_at?: string
+}
+
 export interface User {
   id: string
   email: string
   name: string
   role: UserRole
+  is_superadmin?: boolean
+  active_team?: Team
+  team_memberships?: TeamMembership[]
   avatar_url?: string
   preferred_primary_color?: string
   permissions?: FeaturePermissions
@@ -147,6 +167,41 @@ interface UpdateManagedUserInput {
   name?: string
   role?: UserRole
   isApproved?: boolean
+  teamId?: string
+}
+
+export interface ManagedTeam {
+  id: string
+  name: string
+  slug: string
+  uses_legacy_tables: boolean
+  is_active: boolean
+  member_count: number
+  created_at?: string
+}
+
+export interface TeamManagedUser extends AdminManagedUser {
+  team_ids: string[]
+  team_roles: Record<string, UserRole>
+}
+
+type TeamRow = {
+  id: string
+  name: string
+  slug: string
+  uses_legacy_tables?: boolean | null
+  is_active?: boolean | null
+  created_at?: string
+}
+
+type TeamMembershipRow = {
+  team_id: string
+  user_id: string
+  role: 'admin' | 'editor' | 'viewer' | null
+  permissions?: Partial<FeaturePermissions> | null
+  is_default?: boolean | null
+  created_at?: string
+  app_teams?: TeamRow | null
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -162,6 +217,38 @@ const DEFAULT_SETTINGS: Settings = {
   subheader_font_size: '1.5rem',
   sidebar_font_family: '',
   sidebar_font_size: '0.95rem',
+}
+
+export const LEGACY_AUTOMATION_TEAM: Team = {
+  id: 'automation',
+  name: 'Automation',
+  slug: 'automation',
+  uses_legacy_tables: true,
+  is_active: true,
+}
+
+const TEAM_SCHEMA_MISSING_CODES = new Set(['42P01', '42703', 'PGRST200', 'PGRST204'])
+
+function isTeamSchemaMissingError(error: unknown) {
+  const maybeError = error as { code?: string; message?: string } | undefined
+  const message = maybeError?.message || ''
+
+  return Boolean(
+    (maybeError?.code && TEAM_SCHEMA_MISSING_CODES.has(maybeError.code)) ||
+      message.includes('app_teams') ||
+      message.includes('team_memberships') ||
+      message.includes('team_activities') ||
+      message.includes('team_settings') ||
+      message.includes('super_admins')
+  )
+}
+
+function getActiveTeamOrLegacy(team?: Team | null) {
+  return team || LEGACY_AUTOMATION_TEAM
+}
+
+function shouldUseLegacyTables(team?: Team | null) {
+  return getActiveTeamOrLegacy(team).uses_legacy_tables
 }
 
 export const ADMIN_PERMISSIONS: FeaturePermissions = {
@@ -219,6 +306,10 @@ export function hasPermission(user: User | null | undefined, feature: FeatureKey
     return false
   }
 
+  if (user.is_superadmin) {
+    return true
+  }
+
   if (user.role === 'admin') {
     return true
   }
@@ -239,6 +330,37 @@ function normalizeUserRole(role: UserProfileRow['role'] | undefined): UserRole {
   return 'viewer'
 }
 
+function normalizeTeam(row: TeamRow | null | undefined): Team {
+  if (!row) {
+    return LEGACY_AUTOMATION_TEAM
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    uses_legacy_tables: row.uses_legacy_tables === true,
+    is_active: row.is_active !== false,
+    created_at: row.created_at,
+  }
+}
+
+function normalizeTeamMembership(row: TeamMembershipRow): TeamMembership {
+  const role = normalizeUserRole(row.role)
+
+  return {
+    team: normalizeTeam(row.app_teams),
+    role,
+    permissions: normalizePermissions(row.permissions, role),
+    is_default: row.is_default === true,
+    created_at: row.created_at,
+  }
+}
+
+function getPreferredMembership(memberships: TeamMembership[]) {
+  return memberships.find((membership) => membership.is_default) || memberships[0]
+}
+
 function getMetadataAvatar(authUser: SupabaseAuthUser) {
   const metadataAvatar =
     typeof authUser.user_metadata?.avatar_url === 'string'
@@ -248,11 +370,20 @@ function getMetadataAvatar(authUser: SupabaseAuthUser) {
   return metadataAvatar
 }
 
-function normalizeUserProfile(profile: UserProfileRow, avatarUrl?: string): User {
-  const normalizedRole = normalizeUserRole(profile.role)
+function normalizeUserProfile(
+  profile: UserProfileRow,
+  avatarUrl?: string,
+  access: { isSuperadmin?: boolean; memberships?: TeamMembership[] } = {}
+): User {
+  const preferredMembership = getPreferredMembership(access.memberships || [])
+  const normalizedRole = access.isSuperadmin
+    ? 'admin'
+    : preferredMembership?.role || normalizeUserRole(profile.role)
   const normalizedAvatar = (avatarUrl || profile.avatar_url || '').trim()
   const normalizedPrimaryColor = (profile.preferred_primary_color || '').trim()
-  const normalizedPermissions = normalizePermissions(profile.permissions, normalizedRole)
+  const normalizedPermissions = access.isSuperadmin
+    ? { ...ADMIN_PERMISSIONS }
+    : preferredMembership?.permissions || normalizePermissions(profile.permissions, normalizedRole)
   const isApproved = profile.is_approved !== false
 
   return {
@@ -260,6 +391,18 @@ function normalizeUserProfile(profile: UserProfileRow, avatarUrl?: string): User
     email: profile.email,
     name: profile.name,
     role: normalizedRole,
+    is_superadmin: access.isSuperadmin === true,
+    active_team: preferredMembership?.team || LEGACY_AUTOMATION_TEAM,
+    team_memberships: access.memberships?.length
+      ? access.memberships
+      : [
+          {
+            team: LEGACY_AUTOMATION_TEAM,
+            role: normalizedRole,
+            permissions: normalizedPermissions,
+            is_default: true,
+          },
+        ],
     avatar_url: normalizedAvatar || undefined,
     preferred_primary_color: normalizedPrimaryColor || undefined,
     permissions: normalizedPermissions,
@@ -343,7 +486,7 @@ async function notifyAdminAboutSignup(payload: { id: string; email: string; name
   }
 }
 
-async function getUserProfileById(userId: string) {
+async function getUserProfileRowById(userId: string) {
   const { data, error } = await supabase
     .from('users')
     .select('id, email, name, role, avatar_url, preferred_primary_color, permissions, is_approved, approved_at, created_at')
@@ -354,7 +497,83 @@ async function getUserProfileById(userId: string) {
     throw error
   }
 
-  return data ? normalizeUserProfile(data) : null
+  return data
+}
+
+async function getUserProfileById(userId: string) {
+  const data = await getUserProfileRowById(userId)
+
+  if (!data) {
+    return null
+  }
+
+  const access = await getUserTeamAccess(userId)
+  return normalizeUserProfile(data, undefined, access)
+}
+
+async function getUserTeamAccess(userId: string) {
+  try {
+    const [{ data: superAdminRows, error: superAdminError }, { data: membershipRows, error: membershipsError }] =
+      await Promise.all([
+        supabase.from('super_admins').select('user_id').eq('user_id', userId).limit(1),
+        supabase
+          .from('team_memberships')
+          .select(
+            'team_id, user_id, role, permissions, is_default, created_at, app_teams(id, name, slug, uses_legacy_tables, is_active, created_at)'
+          )
+          .eq('user_id', userId),
+      ])
+
+    if (superAdminError) {
+      throw superAdminError
+    }
+
+    if (membershipsError) {
+      throw membershipsError
+    }
+
+    const isSuperadmin = Boolean(superAdminRows && superAdminRows.length > 0)
+    const memberships = ((membershipRows || []) as unknown as TeamMembershipRow[])
+      .map(normalizeTeamMembership)
+      .filter((membership) => membership.team.is_active !== false)
+
+    if (isSuperadmin) {
+      const { data: teamRows, error: teamsError } = await supabase
+        .from('app_teams')
+        .select('id, name, slug, uses_legacy_tables, is_active, created_at')
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+
+      if (teamsError) {
+        throw teamsError
+      }
+
+      return {
+        isSuperadmin,
+        memberships: ((teamRows || []) as TeamRow[]).map((team, index) => ({
+          team: normalizeTeam(team),
+          role: 'admin' as UserRole,
+          permissions: { ...ADMIN_PERMISSIONS },
+          is_default: team.slug === 'automation' || index === 0,
+          created_at: team.created_at,
+        })),
+      }
+    }
+
+    return {
+      isSuperadmin,
+      memberships,
+    }
+  } catch (error) {
+    if (!isTeamSchemaMissingError(error)) {
+      throw error
+    }
+
+    return {
+      isSuperadmin: false,
+      memberships: [],
+    }
+  }
 }
 
 async function upsertUserProfile(profile: User) {
@@ -387,16 +606,19 @@ async function upsertUserProfile(profile: User) {
 }
 
 async function syncUserProfile(authUser: SupabaseAuthUser) {
-  const existingProfile = await getUserProfileById(authUser.id)
+  const existingProfileRow = await getUserProfileRowById(authUser.id)
+  const access = await getUserTeamAccess(authUser.id)
+  const existingProfile = existingProfileRow ? normalizeUserProfile(existingProfileRow, undefined, access) : null
   const metadataAvatar = getMetadataAvatar(authUser)
+  const existingProfileRole = normalizeUserRole(existingProfileRow?.role)
   const desiredProfile: User = {
     id: authUser.id,
     email: authUser.email ?? existingProfile?.email ?? '',
     name: existingProfile?.name || getMetadataName(authUser),
-    role: existingProfile?.role ?? 'viewer',
+    role: existingProfileRow ? existingProfileRole : 'viewer',
     avatar_url: metadataAvatar || existingProfile?.avatar_url,
     preferred_primary_color: existingProfile?.preferred_primary_color || '',
-    permissions: normalizePermissions(existingProfile?.permissions, existingProfile?.role || 'viewer'),
+    permissions: normalizePermissions(existingProfileRow?.permissions, existingProfileRow ? existingProfileRole : 'viewer'),
     is_approved: existingProfile?.is_approved ?? true,
     approved_at: existingProfile?.approved_at ?? null,
     created_at: existingProfile?.created_at,
@@ -420,10 +642,22 @@ async function syncUserProfile(authUser: SupabaseAuthUser) {
   }
 
   const updatedProfile = await upsertUserProfile(desiredProfile)
-  return {
-    ...updatedProfile,
-    avatar_url: desiredProfile.avatar_url,
-  }
+  return normalizeUserProfile(
+    {
+      id: updatedProfile.id,
+      email: updatedProfile.email,
+      name: updatedProfile.name,
+      role: updatedProfile.role,
+      avatar_url: updatedProfile.avatar_url || '',
+      preferred_primary_color: updatedProfile.preferred_primary_color || '',
+      permissions: updatedProfile.permissions,
+      is_approved: updatedProfile.is_approved,
+      approved_at: updatedProfile.approved_at,
+      created_at: updatedProfile.created_at,
+    },
+    desiredProfile.avatar_url,
+    access
+  )
 }
 
 function getFormattedActivity(activity: Activity) {
@@ -535,8 +769,22 @@ export function subscribeToAuthChanges(callback: (user: User | null) => void) {
   return () => subscription.unsubscribe()
 }
 
-export async function getActivities() {
+export async function getActivities(team?: Team | null) {
   try {
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const data = await fetchAllActivitiesBatched(() =>
+        supabase
+          .from('team_activities')
+          .select('*')
+          .eq('team_id', activeTeam.id)
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false })
+      )
+
+      return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+    }
+
     const data = await fetchAllActivitiesBatched(() =>
       supabase
       .from('activities')
@@ -551,8 +799,19 @@ export async function getActivities() {
   }
 }
 
-export async function createActivity(activity: Activity) {
+export async function createActivity(activity: Activity, team?: Team | null) {
   try {
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const { data, error } = await supabase
+        .from('team_activities')
+        .insert([{ ...getFormattedActivity(activity), team_id: activeTeam.id }])
+        .select()
+
+      if (error) throw error
+      return data?.[0] ? normalizeActivity(data[0] as Partial<Activity>) : undefined
+    }
+
     const { data, error } = await supabase
       .from('activities')
       .insert([getFormattedActivity(activity)])
@@ -566,10 +825,20 @@ export async function createActivity(activity: Activity) {
   }
 }
 
-export async function createActivities(activities: Activity[]) {
+export async function createActivities(activities: Activity[], team?: Team | null) {
   try {
     if (activities.length === 0) {
       return 0
+    }
+
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const { error } = await supabase
+        .from('team_activities')
+        .insert(activities.map((activity) => ({ ...getFormattedActivity(activity), team_id: activeTeam.id })))
+
+      if (error) throw error
+      return activities.length
     }
 
     const { error } = await supabase.from('activities').insert(activities.map(getFormattedActivity))
@@ -582,8 +851,28 @@ export async function createActivities(activities: Activity[]) {
   }
 }
 
-export async function updateActivity(id: string, activity: Partial<Activity>) {
+export async function updateActivity(id: string, activity: Partial<Activity>, team?: Team | null) {
   try {
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const { data, error } = await supabase
+        .from('team_activities')
+        .update({
+          ...activity,
+          comments: activity.comments ?? '',
+        })
+        .eq('id', id)
+        .eq('team_id', activeTeam.id)
+        .select()
+
+      if (error) {
+        const errorMessage = error.message || JSON.stringify(error)
+        throw new Error(`Update failed: ${errorMessage}`)
+      }
+
+      return data?.[0] ? normalizeActivity(data[0] as Partial<Activity>) : undefined
+    }
+
     const { data, error } = await supabase
       .from('activities')
       .update({
@@ -605,8 +894,16 @@ export async function updateActivity(id: string, activity: Partial<Activity>) {
   }
 }
 
-export async function deleteActivity(id: string) {
+export async function deleteActivity(id: string, team?: Team | null) {
   try {
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const { error } = await supabase.from('team_activities').delete().eq('id', id).eq('team_id', activeTeam.id)
+
+      if (error) throw error
+      return
+    }
+
     const { error } = await supabase.from('activities').delete().eq('id', id)
 
     if (error) throw error
@@ -722,8 +1019,25 @@ export async function getUsers() {
   }
 }
 
-export async function getEditors() {
+export async function getEditors(team?: Team | null) {
   try {
+    if (team?.id && !shouldUseLegacyTables(team)) {
+      const { data, error } = await supabase
+        .from('team_memberships')
+        .select('user_id, user_name')
+        .eq('team_id', team.id)
+        .eq('role', 'editor')
+        .order('user_name', { ascending: true })
+
+      if (error) throw error
+
+      return ((data || []) as Array<{ user_id: string; user_name: string }>).map((membership) => ({
+        id: membership.user_id,
+        name: membership.user_name,
+        email: '',
+      }))
+    }
+
     const { data, error } = await supabase
       .from('users')
       .select('id, email, name')
@@ -738,8 +1052,22 @@ export async function getEditors() {
   }
 }
 
-export async function getActivitiesByUser(userName: string) {
+export async function getActivitiesByUser(userName: string, team?: Team | null) {
   try {
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const { data, error } = await supabase
+        .from('team_activities')
+        .select('*')
+        .eq('team_id', activeTeam.id)
+        .eq('performer', userName)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+    }
+
     const { data, error } = await supabase
       .from('activities')
       .select('*')
@@ -812,8 +1140,10 @@ export async function updateUserDetails(userId: string, details: UpdateUserDetai
 
     if (profileError) throw profileError
 
+    const access = await getUserTeamAccess(userId)
+
     return {
-      user: normalizeUserProfile(updatedProfile, getMetadataAvatar(updatedAuthUser) || trimmedAvatarUrl),
+      user: normalizeUserProfile(updatedProfile, getMetadataAvatar(updatedAuthUser) || trimmedAvatarUrl, access),
       emailChangePending,
       pendingEmail: emailChangePending ? trimmedEmail : undefined,
     }
@@ -823,8 +1153,32 @@ export async function updateUserDetails(userId: string, details: UpdateUserDetai
   }
 }
 
-export async function getSettings() {
+export async function getSettings(team?: Team | null) {
   try {
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const { data, error } = await supabase
+        .from('team_settings')
+        .select('*')
+        .eq('team_id', activeTeam.id)
+        .maybeSingle()
+
+      if (error) throw error
+
+      if (data) {
+        return {
+          ...DEFAULT_SETTINGS,
+          ...data,
+        } as Settings
+      }
+
+      return {
+        ...DEFAULT_SETTINGS,
+        webapp_name: `${activeTeam.name} Activities Tracker`,
+        browser_tab_name: `${activeTeam.name} Activities`,
+      }
+    }
+
     const { data, error } = await supabase.from('settings').select('*').limit(1)
 
     if (error) throw error
@@ -843,8 +1197,31 @@ export async function getSettings() {
   }
 }
 
-export async function updateSettings(settings: Partial<Settings>, userId: string) {
+export async function updateSettings(settings: Partial<Settings>, userId: string, team?: Team | null) {
   try {
+    if (!shouldUseLegacyTables(team)) {
+      const activeTeam = getActiveTeamOrLegacy(team)
+      const { data, error } = await supabase
+        .from('team_settings')
+        .upsert(
+          [
+            {
+              ...DEFAULT_SETTINGS,
+              ...settings,
+              team_id: activeTeam.id,
+              updated_at: new Date().toISOString(),
+              updated_by: userId,
+            },
+          ],
+          { onConflict: 'team_id' }
+        )
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as Settings
+    }
+
     const { data: existing, error: existingError } = await supabase
       .from('settings')
       .select('id')
@@ -934,17 +1311,107 @@ export async function getUsersCount() {
   return count || 0
 }
 
-export async function getEditorsCount() {
-  const { count, error } = await supabase
-    .from('users')
-    .select('id', { count: 'exact', head: true })
-    .eq('role', 'editor')
+export async function getEditorsCount(team?: Team | null) {
+  const query =
+    team?.id && !shouldUseLegacyTables(team)
+      ? supabase
+          .from('team_memberships')
+          .select('user_id', { count: 'exact', head: true })
+          .eq('team_id', team.id)
+          .eq('role', 'editor')
+      : supabase
+          .from('users')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'editor')
+
+  const { count, error } = await query
 
   if (error) {
     throw error
   }
 
   return count || 0
+}
+
+export async function getManagedTeams(): Promise<ManagedTeam[]> {
+  try {
+    const [{ data: teams, error: teamsError }, { data: memberships, error: membershipsError }] =
+      await Promise.all([
+        supabase
+          .from('app_teams')
+          .select('id, name, slug, uses_legacy_tables, is_active, created_at')
+          .order('name', { ascending: true }),
+        supabase.from('team_memberships').select('team_id'),
+      ])
+
+    if (teamsError) throw teamsError
+    if (membershipsError) throw membershipsError
+
+    const memberCounts = ((memberships || []) as Array<{ team_id: string }>).reduce<Record<string, number>>(
+      (counts, item) => {
+        counts[item.team_id] = (counts[item.team_id] || 0) + 1
+        return counts
+      },
+      {}
+    )
+
+    return ((teams || []) as TeamRow[]).map((team) => ({
+      ...normalizeTeam(team),
+      uses_legacy_tables: team.uses_legacy_tables === true,
+      is_active: team.is_active !== false,
+      member_count: memberCounts[team.id] || 0,
+    }))
+  } catch (error) {
+    if (!isTeamSchemaMissingError(error)) {
+      throw error
+    }
+
+    return [
+      {
+        ...LEGACY_AUTOMATION_TEAM,
+        uses_legacy_tables: true,
+        is_active: true,
+        member_count: 0,
+      },
+    ]
+  }
+}
+
+function slugifyTeamName(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+export async function createManagedTeam(input: { name: string; slug?: string }) {
+  const name = input.name.trim()
+  const slug = (input.slug?.trim() || slugifyTeamName(name)).toLowerCase()
+
+  if (!name || !slug) {
+    throw new Error('Team name is required.')
+  }
+
+  const { data, error } = await supabase
+    .from('app_teams')
+    .insert([{ name, slug, uses_legacy_tables: false }])
+    .select('id, name, slug, uses_legacy_tables, is_active, created_at')
+    .single<TeamRow>()
+
+  if (error) {
+    throw error
+  }
+
+  await supabase.from('team_settings').insert([
+    {
+      team_id: data.id,
+      webapp_name: `${data.name} Activities Tracker`,
+      browser_tab_name: `${data.name} Activities`,
+    },
+  ])
+
+  return normalizeTeam(data)
 }
 
 export async function getManagedUsers() {
@@ -958,6 +1425,80 @@ export async function getManagedUsers() {
   }
 
   return (data || []).map((user) => normalizeManagedUser(user as UserProfileRow))
+}
+
+export async function getTeamManagedUsers(): Promise<TeamManagedUser[]> {
+  const users = await getManagedUsers()
+
+  try {
+    const { data, error } = await supabase.from('team_memberships').select('team_id, user_id, role')
+
+    if (error) throw error
+
+    const membershipsByUser = ((data || []) as Array<{ team_id: string; user_id: string; role: UserRole | null }>).reduce<
+      Record<string, { teamIds: string[]; teamRoles: Record<string, UserRole> }>
+    >((accumulator, membership) => {
+      accumulator[membership.user_id] = accumulator[membership.user_id] || { teamIds: [], teamRoles: {} }
+      accumulator[membership.user_id].teamIds.push(membership.team_id)
+      accumulator[membership.user_id].teamRoles[membership.team_id] = normalizeUserRole(membership.role)
+      return accumulator
+    }, {})
+
+    return users.map((user) => ({
+      ...user,
+      team_ids: membershipsByUser[user.id]?.teamIds || [],
+      team_roles: membershipsByUser[user.id]?.teamRoles || {},
+    }))
+  } catch (error) {
+    if (!isTeamSchemaMissingError(error)) {
+      throw error
+    }
+
+    return users.map((user) => ({
+      ...user,
+      team_ids: [LEGACY_AUTOMATION_TEAM.id],
+      team_roles: { [LEGACY_AUTOMATION_TEAM.id]: user.role },
+    }))
+  }
+}
+
+export async function setUserTeamMembership(input: {
+  userId: string
+  teamId: string
+  enabled: boolean
+  role?: UserRole
+}) {
+  if (input.teamId === LEGACY_AUTOMATION_TEAM.id) {
+    return
+  }
+
+  if (!input.enabled) {
+    const { error } = await supabase
+      .from('team_memberships')
+      .delete()
+      .eq('user_id', input.userId)
+      .eq('team_id', input.teamId)
+
+    if (error) throw error
+    return
+  }
+
+  const role = input.role || 'viewer'
+  const { error } = await supabase.from('team_memberships').upsert(
+    [
+      {
+        user_id: input.userId,
+        team_id: input.teamId,
+        role,
+        permissions: normalizePermissions(undefined, role),
+      },
+    ],
+    { onConflict: 'team_id,user_id' }
+  )
+
+  if (error) {
+    throw error
+  }
 }
 
 export async function createManagedUser(input: {
@@ -998,6 +1539,15 @@ export async function updateManagedUser(userId: string, input: UpdateManagedUser
     data: { user: authUser },
   } = await supabase.auth.getUser()
 
+  if (input.teamId && input.teamId !== LEGACY_AUTOMATION_TEAM.id && input.role) {
+    await setUserTeamMembership({
+      userId,
+      teamId: input.teamId,
+      enabled: true,
+      role: input.role,
+    })
+  }
+
   if (typeof input.email === 'string') {
     payload.email = input.email.trim()
   }
@@ -1006,7 +1556,7 @@ export async function updateManagedUser(userId: string, input: UpdateManagedUser
     payload.name = input.name.trim()
   }
 
-  if (input.role) {
+  if (input.role && (!input.teamId || input.teamId === LEGACY_AUTOMATION_TEAM.id)) {
     payload.role = input.role
     payload.permissions = normalizePermissions(undefined, input.role)
   }
@@ -1015,6 +1565,20 @@ export async function updateManagedUser(userId: string, input: UpdateManagedUser
     payload.is_approved = input.isApproved
     payload.approved_at = input.isApproved ? new Date().toISOString() : null
     payload.approved_by = input.isApproved ? authUser?.id || null : null
+  }
+
+  if (Object.keys(payload).length === 0) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, name, role, permissions, is_approved, approved_at, created_at')
+      .eq('id', userId)
+      .single<UserProfileRow>()
+
+    if (error) {
+      throw error
+    }
+
+    return normalizeManagedUser(data)
   }
 
   const { data, error } = await supabase
@@ -1060,13 +1624,16 @@ export async function uploadBrandingAsset(adminUserId: string, kind: 'logo' | 'f
   return data.publicUrl
 }
 
-export async function searchActivities(filters: SearchFilters) {
+export async function searchActivities(filters: SearchFilters, team?: Team | null) {
   try {
     if (!matchesSearchFilters(filters)) {
-      return getActivities()
+      return getActivities(team)
     }
 
-    let query = supabase.from('activities').select('*')
+    const activeTeam = getActiveTeamOrLegacy(team)
+    let query = shouldUseLegacyTables(team)
+      ? supabase.from('activities').select('*')
+      : supabase.from('team_activities').select('*').eq('team_id', activeTeam.id)
     const hasDateFilters = Boolean(filters.date || filters.startDate || filters.endDate)
 
     if (hasDateFilters) {

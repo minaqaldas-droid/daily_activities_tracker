@@ -1,31 +1,102 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  type AdminManagedUser,
+  type ManagedTeam,
+  type Team,
+  type TeamManagedUser,
+  type User,
+  type UserRole,
+  createManagedTeam,
   deleteManagedUser,
   getManagedUsers,
+  getManagedTeams,
+  getTeamManagedUsers,
+  setUserTeamMembership,
   updateManagedUser,
 } from '../supabaseClient'
 
 interface UserManagementModalProps {
+  currentUser: User
+  activeTeam?: Team | null
   onClose: () => void
 }
 
-export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClose }) => {
-  const [users, setUsers] = useState<AdminManagedUser[]>([])
-  const [draftUsers, setDraftUsers] = useState<AdminManagedUser[]>([])
+type ManagedUserDraft = TeamManagedUser
+const ROLE_OPTIONS: UserRole[] = ['admin', 'editor', 'viewer']
+
+function getSortedIds(ids: string[]) {
+  return [...ids].sort()
+}
+
+function getTeamRole(user: ManagedUserDraft, team: Pick<ManagedTeam, 'id' | 'uses_legacy_tables'>): UserRole {
+  return user.team_roles[team.id] || (team.uses_legacy_tables ? user.role : 'viewer')
+}
+
+function haveSameTeamAssignments(first: ManagedUserDraft, second: ManagedUserDraft, teams: ManagedTeam[]) {
+  const firstTeamIds = getSortedIds(first.team_ids)
+  const secondTeamIds = getSortedIds(second.team_ids)
+  const teamIdsMatch =
+    firstTeamIds.length === secondTeamIds.length &&
+    firstTeamIds.every((teamId, index) => teamId === secondTeamIds[index])
+
+  if (!teamIdsMatch) {
+    return false
+  }
+
+  return teams.every((team) => {
+    const firstIsMember = team.uses_legacy_tables || first.team_ids.includes(team.id)
+    const secondIsMember = team.uses_legacy_tables || second.team_ids.includes(team.id)
+
+    if (!firstIsMember && !secondIsMember) {
+      return true
+    }
+
+    return getTeamRole(first, team) === getTeamRole(second, team)
+  })
+}
+
+export const UserManagementModal: React.FC<UserManagementModalProps> = ({ currentUser, activeTeam, onClose }) => {
+  const [users, setUsers] = useState<ManagedUserDraft[]>([])
+  const [draftUsers, setDraftUsers] = useState<ManagedUserDraft[]>([])
+  const [teams, setTeams] = useState<ManagedTeam[]>([])
+  const [newTeamName, setNewTeamName] = useState('')
   const [deletedUserIds, setDeletedUserIds] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const isSuperadmin = currentUser.is_superadmin === true
 
   const loadUsers = async () => {
     try {
       setIsLoading(true)
-      const data = await getManagedUsers()
-      setUsers(data)
-      setDraftUsers(data)
+      const [teamData, userData] = await Promise.all([
+        isSuperadmin ? getManagedTeams() : Promise.resolve([]),
+        isSuperadmin ? getTeamManagedUsers() : getManagedUsers(),
+      ])
+      const normalizedUsers: ManagedUserDraft[] = userData.map((user) => {
+        const teamIds =
+          'team_ids' in user && Array.isArray(user.team_ids)
+            ? user.team_ids
+            : activeTeam?.id
+              ? [activeTeam.id]
+              : []
+        const teamRoles: Record<string, UserRole> =
+          'team_roles' in user && user.team_roles
+            ? (user.team_roles as Record<string, UserRole>)
+            : activeTeam?.id
+              ? { [activeTeam.id]: user.role }
+              : ({} as Record<string, UserRole>)
+
+        return {
+          ...user,
+          team_ids: teamIds,
+          team_roles: teamRoles,
+        }
+      })
+      setTeams(teamData)
+      setUsers(normalizedUsers)
+      setDraftUsers(normalizedUsers)
       setDeletedUserIds(new Set())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users.')
@@ -36,7 +107,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
 
   useEffect(() => {
     void loadUsers()
-  }, [])
+  }, [activeTeam?.id, isSuperadmin])
 
   const filteredUsers = useMemo(() => {
     if (!search.trim()) {
@@ -62,12 +133,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
 
       return (
         original.role !== draftUser.role ||
-        original.is_approved !== draftUser.is_approved
+        original.is_approved !== draftUser.is_approved ||
+        !haveSameTeamAssignments(original, draftUser, teams)
       )
     })
-  }, [deletedUserIds, draftUsers, users])
+  }, [deletedUserIds, draftUsers, teams, users])
 
-  const handleRoleChange = (managedUser: AdminManagedUser, role: AdminManagedUser['role']) => {
+  const handleRoleChange = (managedUser: ManagedUserDraft, role: UserRole) => {
     setDraftUsers((previous) =>
       previous.map((item) =>
         item.id === managedUser.id
@@ -80,7 +152,23 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
     )
   }
 
-  const handleDelete = (managedUser: AdminManagedUser) => {
+  const handleTeamRoleChange = (managedUser: ManagedUserDraft, teamId: string, role: UserRole) => {
+    setDraftUsers((previous) =>
+      previous.map((item) =>
+        item.id === managedUser.id
+          ? {
+              ...item,
+              team_roles: {
+                ...item.team_roles,
+                [teamId]: role,
+              },
+            }
+          : item
+      )
+    )
+  }
+
+  const handleDelete = (managedUser: ManagedUserDraft) => {
     if (!confirm(`Delete user profile "${managedUser.name}"?`)) {
       return
     }
@@ -93,7 +181,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
     })
   }
 
-  const handleApprovalToggle = (managedUser: AdminManagedUser, isApproved: boolean) => {
+  const handleApprovalToggle = (managedUser: ManagedUserDraft, isApproved: boolean) => {
     setDraftUsers((previous) =>
       previous.map((item) =>
         item.id === managedUser.id
@@ -105,6 +193,57 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
           : item
       )
     )
+  }
+
+  const handleTeamToggle = (managedUser: ManagedUserDraft, teamId: string, enabled: boolean) => {
+    setDraftUsers((previous) =>
+      previous.map((item) => {
+        if (item.id !== managedUser.id) {
+          return item
+        }
+
+        const nextTeamIds = enabled
+          ? Array.from(new Set([...item.team_ids, teamId]))
+          : item.team_ids.filter((id) => id !== teamId)
+        const nextTeamRoles = { ...item.team_roles }
+
+        if (enabled && !nextTeamRoles[teamId]) {
+          nextTeamRoles[teamId] = item.role || 'viewer'
+        }
+
+        if (!enabled) {
+          delete nextTeamRoles[teamId]
+        }
+
+        return {
+          ...item,
+          team_ids: nextTeamIds,
+          team_roles: nextTeamRoles,
+        }
+      })
+    )
+  }
+
+  const handleCreateTeam = async () => {
+    setError('')
+    setSuccess('')
+
+    if (!newTeamName.trim()) {
+      setError('Team name is required.')
+      return
+    }
+
+    try {
+      setIsMutating(true)
+      await createManagedTeam({ name: newTeamName })
+      setNewTeamName('')
+      await loadUsers()
+      setSuccess('Team created successfully.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create team.')
+    } finally {
+      setIsMutating(false)
+    }
   }
 
   const handleSaveSettings = async () => {
@@ -125,18 +264,51 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
           continue
         }
 
-        const hasChanges =
+        const legacyTeam = teams.find((team) => team.uses_legacy_tables)
+        const legacyRoleChanged = Boolean(
+          legacyTeam && getTeamRole(original, legacyTeam) !== getTeamRole(draftUser, legacyTeam)
+        )
+        const hasProfileChanges =
           original.role !== draftUser.role ||
-          original.is_approved !== draftUser.is_approved
+          original.is_approved !== draftUser.is_approved ||
+          legacyRoleChanged
 
-        if (!hasChanges) {
-          continue
+        if (hasProfileChanges) {
+          await updateManagedUser(draftUser.id, {
+            role: legacyTeam ? getTeamRole(draftUser, legacyTeam) : draftUser.role,
+            isApproved:
+              original.is_approved !== draftUser.is_approved ? draftUser.is_approved : undefined,
+          })
         }
+      }
 
-        await updateManagedUser(draftUser.id, {
-          role: draftUser.role,
-          isApproved: draftUser.is_approved,
-        })
+      if (isSuperadmin) {
+        for (const draftUser of draftUsers) {
+          const original = users.find((item) => item.id === draftUser.id)
+          if (!original) {
+            continue
+          }
+
+          for (const team of teams) {
+            const wasMember = team.uses_legacy_tables || original.team_ids.includes(team.id)
+            const isMember = team.uses_legacy_tables || draftUser.team_ids.includes(team.id)
+            const originalRole = getTeamRole(original, team)
+            const draftRole = getTeamRole(draftUser, team)
+            const membershipChanged = !team.uses_legacy_tables && wasMember !== isMember
+            const roleChanged = isMember && originalRole !== draftRole
+
+            if (!membershipChanged && !roleChanged) {
+              continue
+            }
+
+            await setUserTeamMembership({
+              userId: draftUser.id,
+              teamId: team.id,
+              enabled: isMember,
+              role: draftRole,
+            })
+          }
+        }
       }
 
       for (const deletedUserId of deletedUserIds) {
@@ -166,7 +338,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
     <div className="modal-overlay">
       <div className="settings-modal user-management-modal">
         <div className="modal-header">
-          <h2>User Management</h2>
+          <h2>Super Admin User Management</h2>
           <button className="modal-close" onClick={onClose}>
             ×
           </button>
@@ -185,6 +357,42 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
           />
         </div>
 
+        {isSuperadmin && (
+          <div className="team-management-panel">
+            <div className="team-management-header">
+              <div>
+                <h3>Teams</h3>
+                <p>Automation, Process, and Instrumentation all use the unified team data model.</p>
+              </div>
+              <div className="team-create-controls">
+                <input
+                  type="text"
+                  value={newTeamName}
+                  onChange={(event) => setNewTeamName(event.target.value)}
+                  placeholder="Process, Instrumentation..."
+                  disabled={isMutating}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void handleCreateTeam()}
+                  disabled={isMutating}
+                >
+                  Create Team
+                </button>
+              </div>
+            </div>
+            <div className="team-chip-list">
+              {teams.map((team) => (
+                <span key={team.id} className="team-chip">
+                  {team.name}
+                  <small>{`${team.member_count} users`}</small>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="table-container">
           <table className="activities-table">
             <thead>
@@ -192,7 +400,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
                 <th>ID</th>
                 <th>Email</th>
                 <th>Name</th>
-                <th>Role</th>
+                {!isSuperadmin && <th>Role</th>}
+                {isSuperadmin && <th>Team Roles</th>}
                 <th>Status</th>
                 <th>Delete</th>
               </tr>
@@ -205,19 +414,60 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
                   </td>
                   <td data-label="Email">{managedUser.email}</td>
                   <td data-label="Name">{managedUser.name}</td>
-                  <td data-label="Role">
-                    <select
-                      value={managedUser.role}
-                      onChange={(e) =>
-                        handleRoleChange(managedUser, e.target.value as AdminManagedUser['role'])
-                      }
-                      disabled={isMutating}
-                    >
-                      <option value="admin">Admin</option>
-                      <option value="editor">Editor</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                  </td>
+                  {!isSuperadmin && (
+                    <td data-label="Role">
+                      <select
+                        value={managedUser.role}
+                        onChange={(e) => handleRoleChange(managedUser, e.target.value as UserRole)}
+                        disabled={isMutating}
+                      >
+                        {ROLE_OPTIONS.map((role) => (
+                          <option key={role} value={role}>
+                            {role.charAt(0).toUpperCase() + role.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
+                  {isSuperadmin && (
+                    <td data-label="Team Roles">
+                      <div className="team-role-grid">
+                        {teams.map((team) => {
+                          const isAssigned = team.uses_legacy_tables || managedUser.team_ids.includes(team.id)
+
+                          return (
+                            <div key={team.id} className={`team-role-row ${isAssigned ? 'assigned' : ''}`}>
+                              <label className="team-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={isAssigned}
+                                  disabled={team.uses_legacy_tables || isMutating}
+                                  onChange={(event) =>
+                                    handleTeamToggle(managedUser, team.id, event.target.checked)
+                                  }
+                                />
+                                <span>{team.name}</span>
+                              </label>
+                              <select
+                                value={getTeamRole(managedUser, team)}
+                                onChange={(event) =>
+                                  handleTeamRoleChange(managedUser, team.id, event.target.value as UserRole)
+                                }
+                                disabled={!isAssigned || isMutating}
+                                aria-label={`${team.name} role for ${managedUser.name}`}
+                              >
+                                {ROLE_OPTIONS.map((role) => (
+                                  <option key={role} value={role}>
+                                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </td>
+                  )}
                   <td data-label="Status">
                     <button
                       type="button"

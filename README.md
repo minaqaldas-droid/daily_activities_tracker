@@ -52,14 +52,14 @@ npm run dev
 npm run build
 ```
 
-## Superadmin Setup
-After a user signs up through the app, promote that profile in Supabase:
+## Superadmin + Teams Setup
+After the main schema is installed, run the additive team migration:
 
 ```sql
-UPDATE public.users
-SET role = 'superadmin'
-WHERE email = 'admin@example.com';
+-- Run MIGRATION_SUPERADMIN_TEAMS_SAFE.sql in Supabase SQL Editor.
 ```
+
+This keeps the old Automation tables in place, copies Automation activities/settings/users roles into the unified team model, and makes Automation, Process, and Instrumentation all run through team-scoped tables with RLS.
 
 More detail: [SUPERADMIN_SETUP.md](./SUPERADMIN_SETUP.md)
 
@@ -76,6 +76,7 @@ More detail: [SUPERADMIN_SETUP.md](./SUPERADMIN_SETUP.md)
 - The production build now splits `xlsx` into its own chunk
 
 ## Notes
-- Activity data remains shared across authenticated users.
-- Settings updates are restricted to superadmins through RLS.
+- Old Automation data remains in the legacy tables for now, but the app uses the unified team tables after migration.
+- Team activity data is isolated by `team_id`.
+- Settings updates apply to the active team.
 - The app still expects the `activities`, `users`, and `settings` tables described in the SQL files.

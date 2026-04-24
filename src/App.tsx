@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { AccountSettings } from './components/AccountSettings'
 import { ActivityForm } from './components/ActivityForm'
 import { ActivityList } from './components/ActivityList'
@@ -17,7 +17,7 @@ import { getActivityTypeLabel } from './constants/activityTypes'
 import { useActivities } from './hooks/useActivities'
 import { useAuth } from './hooks/useAuth'
 import { useSettings } from './hooks/useSettings'
-import { hasPermission, type Activity, type SearchFilters, type Settings, type User } from './supabaseClient'
+import { hasPermission, type Activity, type SearchFilters, type Settings, type Team, type User } from './supabaseClient'
 import { formatDateForDisplay } from './utils/date'
 
 const ExcelImport = lazy(() =>
@@ -158,9 +158,31 @@ function matchesResultsPopupFilter(activity: Activity, filter?: ResultsPopupFilt
 
 function App() {
   const { currentUser, isAuthLoading, login, signUp, logout, setCurrentUser } = useAuth()
+  const [activeTeam, setActiveTeam] = useState<Team | null>(null)
+  const effectiveActiveTeam = activeTeam || currentUser?.active_team || null
+  const activeTeamId = activeTeam?.id || currentUser?.active_team?.id || ''
+  const activeMembership = useMemo(
+    () => currentUser?.team_memberships?.find((membership) => membership.team.id === activeTeamId),
+    [activeTeamId, currentUser?.team_memberships]
+  )
+  const appUser: User | null = useMemo(
+    () =>
+      currentUser
+        ? {
+            ...currentUser,
+            role: currentUser.is_superadmin ? 'admin' : activeMembership?.role || currentUser.role,
+            permissions: currentUser.is_superadmin
+              ? currentUser.permissions
+              : activeMembership?.permissions || currentUser.permissions,
+            active_team: effectiveActiveTeam || undefined,
+          }
+        : null,
+    [activeMembership, currentUser, effectiveActiveTeam]
+  )
   const { settings, setSettings, effectivePrimaryColor } = useSettings(
-    Boolean(currentUser),
-    currentUser?.preferred_primary_color || ''
+    Boolean(appUser),
+    appUser?.preferred_primary_color || '',
+    effectiveActiveTeam
   )
   const {
     activities,
@@ -173,8 +195,9 @@ function App() {
     saveActivity,
     searchApplied,
   } = useActivities({
-    currentUserName: currentUser?.name,
+    currentUserName: appUser?.name,
     performerMode: settings.performer_mode || 'manual',
+    activeTeam: effectiveActiveTeam,
   })
 
   const [message, setMessage] = useState<AppMessage>(null)
@@ -198,6 +221,7 @@ function App() {
 
   useEffect(() => {
     if (!currentUser) {
+      setActiveTeam(null)
       resetActivities()
       setEditingId(null)
       setEditingData(undefined)
@@ -207,6 +231,21 @@ function App() {
       setShowUserManagement(false)
       setResultsPopup(null)
       setIsMobileSidebarOpen(false)
+      return
+    }
+
+    setActiveTeam((previousTeam) => {
+      const availableTeams = currentUser.team_memberships?.map((membership) => membership.team) || []
+      if (previousTeam && availableTeams.some((team) => team.id === previousTeam.id)) {
+        return previousTeam
+      }
+
+      return currentUser.active_team || availableTeams[0] || null
+    })
+  }, [currentUser])
+
+  useEffect(() => {
+    if (!appUser) {
       return
     }
 
@@ -229,7 +268,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [currentUser, loadActivities, resetActivities])
+  }, [appUser, loadActivities])
 
   useEffect(() => {
     if (!message) {
@@ -359,14 +398,14 @@ function App() {
     }
   }, [editingData, editingId, resultsPopup, showAccountSettings, showAdminPanel, showUserManagement])
 
-  const isAdmin = currentUser?.role === 'admin'
-  const canViewDashboard = hasPermission(currentUser, 'dashboard')
-  const canAddActivity = hasPermission(currentUser, 'add')
-  const canSearch = hasPermission(currentUser, 'search')
-  const canImport = hasPermission(currentUser, 'import')
-  const canExport = hasPermission(currentUser, 'export')
-  const canEditAction = hasPermission(currentUser, 'edit_action')
-  const canDeleteAction = hasPermission(currentUser, 'delete_action')
+  const isAdmin = appUser?.role === 'admin'
+  const canViewDashboard = hasPermission(appUser, 'dashboard')
+  const canAddActivity = hasPermission(appUser, 'add')
+  const canSearch = hasPermission(appUser, 'search')
+  const canImport = hasPermission(appUser, 'import')
+  const canExport = hasPermission(appUser, 'export')
+  const canEditAction = hasPermission(appUser, 'edit_action')
+  const canDeleteAction = hasPermission(appUser, 'delete_action')
 
   const buildSearchResultsPopup = (
     sourceActivities: Activity[],
@@ -622,6 +661,10 @@ function App() {
     return <Login onLogin={handleLogin} onSignUp={handleSignUp} />
   }
 
+  if (!appUser) {
+    return null
+  }
+
   const latestSearchActivities = activities.slice(0, 10)
   const searchResultsPopupState = buildSearchResultsPopup(filteredActivities, lastSearchFilters)
   const currentViewLabel = APP_VIEW_LABELS[currentView]
@@ -629,7 +672,18 @@ function App() {
   return (
     <div className={`app-layout ${isSidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
       <Sidebar
-        currentUser={currentUser}
+        currentUser={appUser}
+        teams={currentUser.team_memberships?.map((membership) => membership.team) || []}
+        activeTeamId={effectiveActiveTeam?.id || appUser.active_team?.id || ''}
+        onTeamChange={(teamId) => {
+          const nextTeam = currentUser.team_memberships?.find((membership) => membership.team.id === teamId)?.team
+          if (nextTeam) {
+            setActiveTeam(nextTeam)
+            setResultsPopup(null)
+            setEditingId(null)
+            setEditingData(undefined)
+          }
+        }}
         currentView={currentView}
         onViewChange={handleViewChange}
         isExpanded={isSidebarExpanded}
@@ -714,7 +768,8 @@ function App() {
               <div className="dashboard-section-main">
                 <Dashboard
                   activities={activities}
-                  performerName={currentUser.name}
+                  performerName={appUser.name}
+                  activeTeam={effectiveActiveTeam}
                   onEdit={handleEditActivity}
                   onDelete={handleDeleteActivity}
                   isLoading={isLoading}
@@ -734,7 +789,8 @@ function App() {
                   onSubmit={handleAddOrUpdateActivity}
                   isLoading={isLoading}
                   performerMode={settings.performer_mode || 'manual'}
-                  currentUserName={currentUser.name}
+                  currentUserName={appUser.name}
+                  activeTeam={effectiveActiveTeam}
                 />
               </div>
             )}
@@ -742,7 +798,7 @@ function App() {
             {currentView === 'search' && (
               <>
                 <div className="search-section">
-                  <SearchFilter onSearch={handleSearch} isLoading={isLoading} />
+                  <SearchFilter onSearch={handleSearch} isLoading={isLoading} activeTeam={effectiveActiveTeam} />
                 </div>
 
                 {searchApplied ? (
@@ -806,6 +862,7 @@ function App() {
                 }
               >
                 <ExcelImport
+                  activeTeam={effectiveActiveTeam}
                   onImportSuccess={({ importedCount, skippedCount }) => {
                     setMessage({
                       type: 'success',
@@ -845,7 +902,7 @@ function App() {
 
         {showAccountSettings && (
           <AccountSettings
-            user={currentUser}
+            user={appUser}
             onUpdateSuccess={handleUpdateUser}
             onClose={() => setShowAccountSettings(false)}
             isLoading={isLoading}
@@ -853,9 +910,10 @@ function App() {
           />
         )}
 
-        {showAdminPanel && currentUser.role === 'admin' && (
+        {showAdminPanel && appUser.role === 'admin' && (
           <AdminPanel
-            user={currentUser}
+            user={appUser}
+            activeTeam={effectiveActiveTeam}
             currentSettings={settings}
             onClose={() => setShowAdminPanel(false)}
             onSettingsUpdate={handleSettingsUpdate}
@@ -864,8 +922,12 @@ function App() {
           />
         )}
 
-        {showUserManagement && currentUser.role === 'admin' && (
-          <UserManagementModal onClose={() => setShowUserManagement(false)} />
+        {showUserManagement && appUser.is_superadmin && (
+          <UserManagementModal
+            currentUser={appUser}
+            activeTeam={effectiveActiveTeam}
+            onClose={() => setShowUserManagement(false)}
+          />
         )}
 
         {editingId && editingData && (
@@ -889,7 +951,8 @@ function App() {
                   initialData={editingData}
                   isLoading={isLoading}
                   performerMode={settings.performer_mode || 'manual'}
-                  currentUserName={currentUser.name}
+                  currentUserName={appUser.name}
+                  activeTeam={effectiveActiveTeam}
                 />
               </div>
             </div>

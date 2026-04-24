@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { SYSTEM_OPTIONS } from '../constants/systems'
-import { type Activity, getEditors } from '../supabaseClient'
+import { type Activity, type Team, getEditors } from '../supabaseClient'
 import { buildCommentWithPrefixes, parseCommentPrefixes } from '../utils/comments'
 
 interface ActivityFormProps {
@@ -10,6 +10,7 @@ interface ActivityFormProps {
   isLoading?: boolean
   performerMode?: 'manual' | 'auto'
   currentUserName?: string
+  activeTeam?: Team | null
 }
 
 const getTodayDate = () => {
@@ -55,6 +56,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
   isLoading = false,
   performerMode = 'manual',
   currentUserName = '',
+  activeTeam,
 }) => {
   const [formData, setFormData] = useState<Activity>(getInitialFormData())
   const [usersList, setUsersList] = useState<Array<{ id: string; name: string; email: string }>>([])
@@ -105,7 +107,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     const loadUsers = async () => {
       try {
         setIsLoadingUsers(true)
-        const users = await getEditors()
+        const users = await getEditors(activeTeam)
         setUsersList(users || [])
       } catch (error) {
         console.error('Failed to load editors:', error)
@@ -115,7 +117,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     }
 
     void loadUsers()
-  }, [performerMode])
+  }, [activeTeam, performerMode])
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   type Activity,
   type SearchFilters,
+  type Team,
   createActivity,
   deleteActivity,
   getActivities,
@@ -16,6 +17,7 @@ function hasSearchFilters(filters: SearchFilters) {
 interface UseActivitiesOptions {
   currentUserName?: string
   performerMode?: 'manual' | 'auto'
+  activeTeam?: Team | null
 }
 
 interface SaveActivityOptions {
@@ -23,7 +25,7 @@ interface SaveActivityOptions {
   editingData?: Activity
 }
 
-export function useActivities({ currentUserName = '', performerMode = 'manual' }: UseActivitiesOptions) {
+export function useActivities({ currentUserName = '', performerMode = 'manual', activeTeam }: UseActivitiesOptions) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [filteredActivities, setFilteredActivities] = useState<Activity[]>([])
   const [searchApplied, setSearchApplied] = useState(false)
@@ -34,11 +36,11 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
     setIsLoading(true)
 
     try {
-      const data = await getActivities()
+      const data = await getActivities(activeTeam)
       setActivities(data)
 
       if (hasSearchFilters(activeFilters)) {
-        const results = await searchActivities(activeFilters)
+        const results = await searchActivities(activeFilters, activeTeam)
         setFilteredActivities(results)
         setSearchApplied(true)
       } else {
@@ -50,7 +52,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
     } finally {
       setIsLoading(false)
     }
-  }, [activeFilters])
+  }, [activeFilters, activeTeam])
 
   useEffect(() => {
     if (!hasSearchFilters(activeFilters)) {
@@ -76,7 +78,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
             editedBy: currentUserName || undefined,
           }
 
-          await updateActivity(options.editingId, updateData)
+          await updateActivity(options.editingId, updateData, activeTeam)
         } else {
           const performer =
             performerMode === 'auto' && currentUserName ? currentUserName : activity.performer
@@ -84,7 +86,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
           await createActivity({
             ...activity,
             performer,
-          })
+          }, activeTeam)
         }
 
         await loadActivities()
@@ -92,7 +94,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
         setIsLoading(false)
       }
     },
-    [currentUserName, loadActivities, performerMode]
+    [activeTeam, currentUserName, loadActivities, performerMode]
   )
 
   const removeActivity = useCallback(
@@ -100,13 +102,13 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
       setIsLoading(true)
 
       try {
-        await deleteActivity(id)
+        await deleteActivity(id, activeTeam)
         await loadActivities()
       } finally {
         setIsLoading(false)
       }
     },
-    [loadActivities]
+    [activeTeam, loadActivities]
   )
 
   const runSearch = useCallback(async (filters: SearchFilters) => {
@@ -121,14 +123,14 @@ export function useActivities({ currentUserName = '', performerMode = 'manual' }
         return activities
       }
 
-      const results = await searchActivities(filters)
+      const results = await searchActivities(filters, activeTeam)
       setFilteredActivities(results)
       setSearchApplied(true)
       return results
     } finally {
       setIsLoading(false)
     }
-  }, [activities])
+  }, [activeTeam, activities])
 
   const resetActivities = useCallback(() => {
     setActivities([])

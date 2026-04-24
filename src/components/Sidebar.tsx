@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { hasPermission, type User } from '../supabaseClient'
+import { hasPermission, type Team, type User } from '../supabaseClient'
 
 interface SidebarProps {
   currentUser: User
+  teams?: Team[]
+  activeTeamId?: string
+  onTeamChange?: (teamId: string) => void
   currentView: 'dashboard' | 'add' | 'search' | 'import' | 'export'
   onViewChange: (view: 'dashboard' | 'add' | 'search' | 'import' | 'export') => void
   isExpanded: boolean
@@ -31,6 +34,9 @@ const importExportItems: Array<{ icon: string; label: string; view: NavView; req
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
+  teams = [],
+  activeTeamId = '',
+  onTeamChange,
   currentView,
   onViewChange,
   isExpanded,
@@ -58,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const showAvatarImage = Boolean(currentUser.avatar_url && !isAvatarBroken)
   const userInitial = currentUser.name.trim().charAt(0).toUpperCase() || 'U'
+  const activeTeam = teams.find((team) => team.id === activeTeamId) || currentUser.active_team
   const handleViewSelect = (view: NavView) => {
     onViewChange(view)
 
@@ -155,9 +162,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="user-info">
           <p className="user-name">{currentUser.name}</p>
           <p className="user-email">{currentUser.email}</p>
-          {isAdmin && <span className="user-role">🔐 ADMIN</span>}
+          {activeTeam && <span className="user-role">{activeTeam.name}</span>}
+          {currentUser.is_superadmin && <span className="user-role">SUPER ADMIN</span>}
+          {isAdmin && !currentUser.is_superadmin && <span className="user-role">🔐 ADMIN</span>}
         </div>
       </div>
+
+      {teams.length > 1 && (
+        <div className="sidebar-team-switcher">
+          <label htmlFor="sidebar-team-select">Team</label>
+          <select
+            id="sidebar-team-select"
+            value={activeTeamId}
+            onChange={(event) => onTeamChange?.(event.target.value)}
+          >
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <nav className="sidebar-nav">
         <div className="nav-section">

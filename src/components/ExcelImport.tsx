@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react'
 import { normalizeImportedActivityType } from '../constants/activityTypes'
-import { type Activity, createActivities, createActivity } from '../supabaseClient'
+import { type Activity, type Team, createActivities, createActivity } from '../supabaseClient'
 import { parseImportedDate } from '../utils/date'
 
 interface ExcelImportProps {
   onImportSuccess: (result: ExcelImportResult) => void
   onImportError: (error: string) => void
   isLoading?: boolean
+  activeTeam?: Team | null
 }
 
 export interface ExcelImportResult {
@@ -109,6 +110,7 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
   onImportSuccess,
   onImportError,
   isLoading = false,
+  activeTeam,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importProgress, setImportProgress] = useState(0)
@@ -199,7 +201,7 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
 
       for (const chunk of getChunk(activities, IMPORT_CHUNK_SIZE)) {
         try {
-          await createActivities(chunk)
+          await createActivities(chunk, activeTeam)
           successCount += chunk.length
           processedCount += chunk.length
           setImportProgress(Math.round((processedCount / activities.length) * 100))
@@ -210,7 +212,7 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
 
         for (const activity of chunk) {
           try {
-            await createActivity(activity)
+            await createActivity(activity, activeTeam)
             successCount += 1
           } catch (rowError) {
             errorRows.push(

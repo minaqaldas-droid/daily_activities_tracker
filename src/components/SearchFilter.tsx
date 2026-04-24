@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react'
 import { type ActivityTypeValue, ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { SYSTEM_OPTIONS } from '../constants/systems'
-import { getUsers, type SearchFilters } from '../supabaseClient'
+import { getEditors, type SearchFilters, type Team } from '../supabaseClient'
 
 interface SearchFilterProps {
   onSearch: (filters: SearchFilters) => void | Promise<void>
   isLoading?: boolean
+  activeTeam?: Team | null
 }
 
 type DateFilterMode = 'all' | 'single' | 'range'
 
-export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading = false }) => {
+export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading = false, activeTeam }) => {
   const [keyword, setKeyword] = useState('')
   const [dateMode, setDateMode] = useState<DateFilterMode>('all')
   const [singleDate, setSingleDate] = useState('')
@@ -29,7 +30,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
     const loadPerformers = async () => {
       try {
         setIsLoadingPerformers(true)
-        const users = await getUsers()
+        const users = await getEditors(activeTeam)
         if (isMounted) {
           setPerformers(users || [])
         }
@@ -47,7 +48,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [activeTeam])
 
   const handleDateModeChange = (nextMode: DateFilterMode) => {
     setDateMode(nextMode)
