@@ -1517,6 +1517,20 @@ export async function deleteManagedTeam(teamId: string) {
 }
 
 export async function getManagedUsers() {
+  let superAdminIds = new Set<string>()
+
+  try {
+    const { data, error } = await supabase.from('super_admins').select('user_id')
+
+    if (error) throw error
+
+    superAdminIds = new Set(((data || []) as Array<{ user_id: string }>).map((row) => row.user_id))
+  } catch (error) {
+    if (!isTeamSchemaMissingError(error)) {
+      throw error
+    }
+  }
+
   const { data, error } = await supabase
     .from('users')
     .select('id, email, name, role, permissions, is_approved, approved_at, created_at')
@@ -1526,7 +1540,9 @@ export async function getManagedUsers() {
     throw error
   }
 
-  return (data || []).map((user) => normalizeManagedUser(user as UserProfileRow))
+  return (data || [])
+    .filter((user) => !superAdminIds.has(user.id))
+    .map((user) => normalizeManagedUser(user as UserProfileRow))
 }
 
 export async function getTeamManagedUsers(): Promise<TeamManagedUser[]> {

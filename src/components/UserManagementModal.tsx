@@ -34,6 +34,10 @@ function getTeamRole(user: ManagedUserDraft, team: Pick<ManagedTeam, 'id' | 'use
   return user.team_roles[team.id] || (team.uses_legacy_tables ? user.role : 'viewer')
 }
 
+function isManagedSuperadmin(user: { role?: unknown; is_superadmin?: unknown }) {
+  return ('is_superadmin' in user && user.is_superadmin === true) || String(user.role) === 'superadmin'
+}
+
 function haveSameTeamAssignments(first: ManagedUserDraft, second: ManagedUserDraft, teams: ManagedTeam[]) {
   const firstTeamIds = getSortedIds(first.team_ids)
   const secondTeamIds = getSortedIds(second.team_ids)
@@ -78,26 +82,28 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ curren
         isSuperadmin ? getManagedTeams() : Promise.resolve([]),
         isSuperadmin ? getTeamManagedUsers() : getManagedUsers(),
       ])
-      const normalizedUsers: ManagedUserDraft[] = userData.map((user) => {
-        const teamIds =
-          'team_ids' in user && Array.isArray(user.team_ids)
-            ? user.team_ids
-            : activeTeam?.id
-              ? [activeTeam.id]
-              : []
-        const teamRoles: Record<string, UserRole> =
-          'team_roles' in user && user.team_roles
-            ? (user.team_roles as Record<string, UserRole>)
-            : activeTeam?.id
-              ? { [activeTeam.id]: user.role }
-              : ({} as Record<string, UserRole>)
+      const normalizedUsers: ManagedUserDraft[] = userData
+        .filter((user) => !isManagedSuperadmin(user))
+        .map((user) => {
+          const teamIds =
+            'team_ids' in user && Array.isArray(user.team_ids)
+              ? user.team_ids
+              : activeTeam?.id
+                ? [activeTeam.id]
+                : []
+          const teamRoles: Record<string, UserRole> =
+            'team_roles' in user && user.team_roles
+              ? (user.team_roles as Record<string, UserRole>)
+              : activeTeam?.id
+                ? { [activeTeam.id]: user.role }
+                : ({} as Record<string, UserRole>)
 
-        return {
-          ...user,
-          team_ids: teamIds,
-          team_roles: teamRoles,
-        }
-      })
+          return {
+            ...user,
+            team_ids: teamIds,
+            team_roles: teamRoles,
+          }
+        })
       setTeams(teamData)
       setTeamNameDrafts(
         teamData.reduce<Record<string, string>>((drafts, team) => {
