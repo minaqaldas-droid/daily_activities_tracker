@@ -589,6 +589,7 @@ body.modal-open {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin: 0;
   font-size: 1.35rem;
   font-weight: 700;
   color: #0f172a;
@@ -6102,6 +6103,46 @@ body.modal-open .back-to-top-button {
 
   .team-create-controls {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 768px) {
+  .user-management-modal .table-container {
+    overflow: visible;
+  }
+
+  .user-management-table th:nth-child(1),
+  .user-management-table td:nth-child(1),
+  .user-management-table th:nth-child(2),
+  .user-management-table td:nth-child(2),
+  .user-management-table th:nth-child(3),
+  .user-management-table td:nth-child(3),
+  .user-management-table th:nth-child(4),
+  .user-management-table td:nth-child(4),
+  .user-management-table th:nth-child(5),
+  .user-management-table td:nth-child(5),
+  .user-management-table th:nth-child(6),
+  .user-management-table td:nth-child(6) {
+    width: auto;
+  }
+
+  .user-management-table td {
+    min-width: 0;
+  }
+
+  .user-management-table td code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .team-role-row {
+    grid-template-columns: 1fr;
+  }
+
+  .team-role-row select,
+  .team-role-row .team-checkbox {
+    width: 100%;
   }
 }
 

@@ -249,6 +249,16 @@ function App() {
   }, [currentUser])
 
   useEffect(() => {
+    if (!currentUser || typeof window === 'undefined' || typeof document === 'undefined') {
+      return
+    }
+
+    window.scrollTo(0, 0)
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [currentUser?.id])
+
+  useEffect(() => {
     if (!appUser) {
       return
     }
