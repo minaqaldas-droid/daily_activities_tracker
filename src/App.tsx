@@ -94,6 +94,30 @@ function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilt
     return false
   }
 
+  if (filters.shift && (activity.shift || '') !== filters.shift) {
+    return false
+  }
+
+  if (filters.permitNumber && !includesIgnoreCase(activity.permitNumber || '', filters.permitNumber)) {
+    return false
+  }
+
+  if (filters.instrumentType && !includesIgnoreCase(activity.instrumentType || '', filters.instrumentType)) {
+    return false
+  }
+
+  if (filters.problem && !includesIgnoreCase(activity.problem || '', filters.problem)) {
+    return false
+  }
+
+  if (filters.action && !includesIgnoreCase(activity.action || '', filters.action)) {
+    return false
+  }
+
+  if (filters.comments && !includesIgnoreCase(activity.comments || '', filters.comments)) {
+    return false
+  }
+
   if (filters.activityType && (activity.activityType || '') !== filters.activityType) {
     return false
   }
@@ -109,6 +133,9 @@ function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilt
       formatDateForDisplay(activity.date),
       activity.performer,
       activity.system,
+      activity.shift,
+      activity.permitNumber,
+      activity.instrumentType,
       activity.activityType || '',
       getActivityTypeLabel(activity.activityType),
       activity.tag,
@@ -799,6 +826,7 @@ function App() {
                   activities={activities}
                   performerName={appUser.name}
                   activeTeam={effectiveActiveTeam}
+                  settings={settings}
                   onEdit={handleEditActivity}
                   onDelete={handleDeleteActivity}
                   isLoading={isLoading}
@@ -820,6 +848,7 @@ function App() {
                   performerMode={settings.performer_mode || 'manual'}
                   currentUserName={appUser.name}
                   activeTeam={effectiveActiveTeam}
+                  settings={settings}
                 />
               </div>
             )}
@@ -827,7 +856,12 @@ function App() {
             {currentView === 'search' && (
               <>
                 <div className="search-section">
-                  <SearchFilter onSearch={handleSearch} isLoading={isLoading} activeTeam={effectiveActiveTeam} />
+                  <SearchFilter
+                    onSearch={handleSearch}
+                    isLoading={isLoading}
+                    activeTeam={effectiveActiveTeam}
+                    settings={settings}
+                  />
                 </div>
 
                 {searchApplied ? (
@@ -861,6 +895,7 @@ function App() {
                       onEdit={handleEditActivity}
                       onDelete={handleDeleteActivity}
                       activeTeam={effectiveActiveTeam}
+                      settings={settings}
                       isLoading={isLoading}
                     canEdit={canEditAction}
                     canDelete={canDeleteAction}
@@ -893,6 +928,7 @@ function App() {
               >
                 <ExcelImport
                   activeTeam={effectiveActiveTeam}
+                  settings={settings}
                   onImportSuccess={({ importedCount, skippedCount }) => {
                     setMessage({
                       type: 'success',
@@ -924,7 +960,12 @@ function App() {
                   </div>
                 }
               >
-                <ExcelExport activities={activities} activeTeam={effectiveActiveTeam} isLoading={isLoading} />
+                <ExcelExport
+                  activities={activities}
+                  activeTeam={effectiveActiveTeam}
+                  settings={settings}
+                  isLoading={isLoading}
+                />
               </Suspense>
             )}
           </div>
@@ -1006,6 +1047,7 @@ function App() {
                   performerMode={settings.performer_mode || 'manual'}
                   currentUserName={appUser.name}
                   activeTeam={effectiveActiveTeam}
+                  settings={settings}
                 />
               </div>
             </div>
@@ -1029,6 +1071,7 @@ function App() {
           activities={resultsPopup?.activities || []}
           exportFilename={resultsPopup?.exportFilename}
           activeTeam={effectiveActiveTeam}
+          settings={settings}
           onClose={() => setResultsPopup(null)}
           onEdit={handleEditActivity}
           onDelete={handleDeleteActivity}

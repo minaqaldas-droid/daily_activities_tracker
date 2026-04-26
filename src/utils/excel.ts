@@ -1,4 +1,5 @@
-import { type Activity } from '../supabaseClient'
+import { type Activity, type Settings } from '../supabaseClient'
+import { getActivityFieldValue, getEnabledActivityFields } from './activityFields'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -34,12 +35,18 @@ function sortActivitiesByDateDescending(activities: Activity[]) {
   })
 }
 
-function buildExportRows(activities: Activity[], systemFieldLabel: string) {
+function buildExportRows(activities: Activity[], systemFieldLabel: string, settings?: Settings) {
+  const enabledActivityFields = getEnabledActivityFields(settings)
+
   return sortActivitiesByDateDescending(activities).map((activity) => ({
     Date: formatExcelDate(activity.date),
     Performer: activity.performer,
     'Activity Type': activity.activityType || '',
     [systemFieldLabel]: activity.system,
+    ...enabledActivityFields.reduce<Record<string, string>>((acc, field) => {
+      acc[field.label] = getActivityFieldValue(activity, field.key)
+      return acc
+    }, {}),
     Tag: activity.tag,
     Problem: activity.problem,
     Action: activity.action,
@@ -105,6 +112,7 @@ export async function exportActivitiesToExcel(
     filename?: string
     sheetName?: string
     systemFieldLabel?: string
+    settings?: Settings
   } = {}
 ) {
   if (activities.length === 0) {
@@ -112,20 +120,20 @@ export async function exportActivitiesToExcel(
   }
 
   const XLSX = await import('xlsx')
+  const enabledActivityFields = getEnabledActivityFields(options.settings)
 
-  const worksheet = XLSX.utils.json_to_sheet(buildExportRows(activities, options.systemFieldLabel || 'System'))
+  const worksheet = XLSX.utils.json_to_sheet(
+    buildExportRows(activities, options.systemFieldLabel || 'System', options.settings)
+  )
   const workbook = XLSX.utils.book_new()
 
-  worksheet['!cols'] = [
-    { wch: 12 },
-    { wch: 18 },
-    { wch: 24 },
-    { wch: 12 },
-    { wch: 16 },
-    { wch: 30 },
-    { wch: 30 },
-    { wch: 30 },
-  ]
+  worksheet['!cols'] = enabledActivityFields.map((field) => {
+    if (field.key === 'date') return { wch: 12 }
+    if (field.key === 'performer') return { wch: 18 }
+    if (field.key === 'system' || field.key === 'shift' || field.key === 'activityType') return { wch: 14 }
+    if (field.key === 'permitNumber' || field.key === 'instrumentType' || field.key === 'tag') return { wch: 16 }
+    return { wch: 30 }
+  })
 
   applyWorksheetFormatting(worksheet as Record<string, unknown>, XLSX)
 

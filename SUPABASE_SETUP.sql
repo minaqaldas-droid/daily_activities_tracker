@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS public.activities (
   date TEXT NOT NULL DEFAULT '',
   performer TEXT NOT NULL,
   system TEXT NOT NULL DEFAULT '',
+  shift TEXT NOT NULL DEFAULT '',
+  permit_number TEXT NOT NULL DEFAULT '',
+  instrument_type TEXT NOT NULL DEFAULT '',
   "activityType" TEXT NOT NULL DEFAULT '' CHECK ("activityType" IN ('', 'PM', 'CM', 'Mod')),
   tag TEXT NOT NULL DEFAULT '',
   problem TEXT NOT NULL,
@@ -49,6 +52,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
   subheader_font_size TEXT NOT NULL DEFAULT '1.5rem',
   sidebar_font_family TEXT NOT NULL DEFAULT '',
   sidebar_font_size TEXT NOT NULL DEFAULT '0.95rem',
+  activity_field_config JSONB NOT NULL DEFAULT '{"date": {"enabled": true, "required": true, "order": 10}, "performer": {"enabled": true, "required": true, "order": 20}, "system": {"enabled": true, "required": true, "order": 30}, "shift": {"enabled": false, "required": false, "order": 40}, "permitNumber": {"enabled": false, "required": false, "order": 50}, "instrumentType": {"enabled": false, "required": false, "order": 60}, "activityType": {"enabled": true, "required": true, "order": 70}, "tag": {"enabled": true, "required": true, "order": 80}, "problem": {"enabled": true, "required": true, "order": 90}, "action": {"enabled": true, "required": true, "order": 100}, "comments": {"enabled": true, "required": false, "order": 110}}'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
   updated_by UUID REFERENCES public.users(id) ON DELETE SET NULL
 );
@@ -58,6 +62,9 @@ CREATE INDEX IF NOT EXISTS idx_activities_created_at ON public.activities(create
 CREATE INDEX IF NOT EXISTS idx_activities_performer ON public.activities(performer);
 CREATE INDEX IF NOT EXISTS idx_activities_tag ON public.activities(tag);
 CREATE INDEX IF NOT EXISTS idx_activities_system ON public.activities(system);
+CREATE INDEX IF NOT EXISTS idx_activities_shift ON public.activities(shift);
+CREATE INDEX IF NOT EXISTS idx_activities_permit_number ON public.activities(permit_number);
+CREATE INDEX IF NOT EXISTS idx_activities_instrument_type ON public.activities(instrument_type);
 CREATE INDEX IF NOT EXISTS idx_activities_activity_type ON public.activities("activityType");
 CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);

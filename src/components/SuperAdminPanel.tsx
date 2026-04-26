@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { type Settings, type Team, type User, updateSettings, uploadBrandingAsset } from '../supabaseClient'
+import { getActivityFieldConfig, getOrderedActivityFields, type ConfigurableActivityFieldKey } from '../utils/activityFields'
 
 interface AdminPanelProps {
   user: User
@@ -16,6 +17,19 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024
 
 function isValidImageFile(file: File) {
   return ACCEPTED_IMAGE_TYPES.includes(file.type) && file.size <= MAX_FILE_SIZE
+}
+
+function normalizeSequentialOrder(settings: Settings) {
+  const normalizedConfig = getActivityFieldConfig(settings)
+  const orderedFields = getOrderedActivityFields({ ...settings, activity_field_config: normalizedConfig })
+
+  return orderedFields.reduce<typeof normalizedConfig>((accumulator, field, index) => {
+    accumulator[field.key] = {
+      ...normalizedConfig[field.key],
+      order: index + 1,
+    }
+    return accumulator
+  }, { ...normalizedConfig })
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -36,6 +50,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [subheaderFontSize, setSubheaderFontSize] = useState('1.5rem')
   const [sidebarFontFamily, setSidebarFontFamily] = useState('')
   const [sidebarFontSize, setSidebarFontSize] = useState('0.95rem')
+  const [activityFieldConfig, setActivityFieldConfig] = useState(normalizeSequentialOrder(currentSettings))
   const [logoPreview, setLogoPreview] = useState('')
   const [faviconPreview, setFaviconPreview] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -43,6 +58,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const orderedFields = getOrderedActivityFields({ ...currentSettings, activity_field_config: activityFieldConfig })
 
   useEffect(() => {
     setWebappName(currentSettings.webapp_name || 'Daily Activities Tracker')
@@ -54,6 +70,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSubheaderFontSize(currentSettings.subheader_font_size || '1.5rem')
     setSidebarFontFamily(currentSettings.sidebar_font_family || '')
     setSidebarFontSize(currentSettings.sidebar_font_size || '0.95rem')
+    setActivityFieldConfig(normalizeSequentialOrder(currentSettings))
     setLogoPreview(currentSettings.logo_url || '')
     setFaviconPreview(currentSettings.favicon_url || currentSettings.logo_url || '')
     setLogoFile(null)
@@ -129,6 +146,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           subheader_font_size: subheaderFontSize.trim(),
           sidebar_font_family: sidebarFontFamily.trim(),
           sidebar_font_size: sidebarFontSize.trim(),
+          activity_field_config: activityFieldConfig,
         },
         user.id,
         activeTeam
@@ -143,6 +161,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleFieldEnabledChange = (fieldKey: ConfigurableActivityFieldKey, enabled: boolean) => {
+    setActivityFieldConfig((previous) => ({
+      ...previous,
+      [fieldKey]: {
+        enabled,
+        required: enabled ? previous[fieldKey].required : false,
+        order: previous[fieldKey].order,
+      },
+    }))
+  }
+
+  const handleFieldRequiredChange = (fieldKey: ConfigurableActivityFieldKey, required: boolean) => {
+    setActivityFieldConfig((previous) => ({
+      ...previous,
+      [fieldKey]: {
+        enabled: previous[fieldKey].enabled,
+        required: previous[fieldKey].enabled ? required : false,
+        order: previous[fieldKey].order,
+      },
+    }))
+  }
+
+  const moveField = (fieldKey: ConfigurableActivityFieldKey, direction: -1 | 1) => {
+    const currentIndex = orderedFields.findIndex((field) => field.key === fieldKey)
+    const targetIndex = currentIndex + direction
+
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedFields.length) {
+      return
+    }
+
+    const currentField = orderedFields[currentIndex]
+    const targetField = orderedFields[targetIndex]
+
+    setActivityFieldConfig((previous) => ({
+      ...previous,
+      [currentField.key]: {
+        ...previous[currentField.key],
+        order: previous[targetField.key].order,
+      },
+      [targetField.key]: {
+        ...previous[targetField.key],
+        order: previous[currentField.key].order,
+      },
+    }))
   }
 
   return (
@@ -310,6 +374,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               />
             </div>
           </div>
+
+          {user.is_superadmin && (
+            <div className="form-group">
+              <label>Team Activity Fields</label>
+              <div className="team-activity-fields-grid">
+                {orderedFields.map((field, index) => (
+                  <div key={field.key} className="team-activity-field-card">
+                    <strong className="team-activity-field-title">{field.label}</strong>
+                    <div className="radio-group admin-performer-row">
+                      <label className="radio-option">
+                        <input
+                          type="checkbox"
+                          checked={activityFieldConfig[field.key].enabled}
+                          onChange={(event) => handleFieldEnabledChange(field.key, event.target.checked)}
+                          disabled={isSubmitting || isLoading}
+                        />
+                        <span className="radio-label admin-performer-option-label">
+                          <span>Available for this team</span>
+                        </span>
+                      </label>
+                      <label className="radio-option">
+                        <input
+                          type="checkbox"
+                          checked={activityFieldConfig[field.key].required}
+                          onChange={(event) => handleFieldRequiredChange(field.key, event.target.checked)}
+                          disabled={isSubmitting || isLoading || !activityFieldConfig[field.key].enabled}
+                        />
+                        <span className="radio-label admin-performer-option-label">
+                          <span>Required when shown</span>
+                        </span>
+                      </label>
+                    </div>
+                    <div className="team-activity-field-order-row">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={index + 1}
+                        readOnly
+                        disabled={isSubmitting || isLoading}
+                        className="team-activity-field-order-input"
+                      />
+                      <div className="team-activity-field-move-buttons">
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => moveField(field.key, -1)}
+                          disabled={isSubmitting || isLoading || index === 0}
+                        >
+                          Move Up
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => moveField(field.key, 1)}
+                          disabled={isSubmitting || isLoading || index === orderedFields.length - 1}
+                        >
+                          Move Down
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="modal-actions">
             <button type="submit" className="btn btn-primary" disabled={isSubmitting || isLoading}>

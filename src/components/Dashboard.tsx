@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
-import { type Activity, type Team, getEditors, getEditorsCount } from '../supabaseClient'
+import { type Activity, type Settings, type Team, getEditors, getEditorsCount } from '../supabaseClient'
 import { getSystemFieldLabel, getSystemFieldLabelPlural } from '../utils/teamActivityField'
 import { ActivityList } from './ActivityList'
 
@@ -31,6 +31,7 @@ interface DashboardProps {
   canEdit?: boolean
   canDelete?: boolean
   activeTeam?: Team | null
+  settings?: Settings
   onEditDenied?: () => void
   onDeleteDenied?: () => void
   onOpenActivityResults?: (request: DashboardActivityRequest) => void
@@ -278,6 +279,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   canEdit = true,
   canDelete = true,
   activeTeam,
+  settings,
   onEditDenied,
   onDeleteDenied,
   onOpenActivityResults,
@@ -366,20 +368,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const myActivities = activities.filter((activity) => activity.performer === performerName).length
     const recentActivities = activities.slice(0, 5)
     const recentlyEditedActivities = activities
-      .filter((activity) => {
-        if (!String(activity.editedBy || '').trim()) {
-          return false
-        }
-
-        const referenceDate = activity.edited_at || activity.created_at || activity.date || ''
-        return referenceDate >= weekAgo
-      })
+      .filter((activity) => String(activity.editedBy || '').trim())
       .sort((first, second) => {
         const firstDate = first.edited_at || first.created_at || first.date || ''
         const secondDate = second.edited_at || second.created_at || second.date || ''
         return secondDate.localeCompare(firstDate)
       })
-      .slice(0, 5)
+      .slice(0, 20)
 
     setStats((current) => ({
       totalActivities: activities.length,
@@ -530,101 +525,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        <div
-          className={`stat-card ${onOpenActivityResults ? 'dashboard-card-actionable' : ''}`}
-          onClick={() =>
-            openActivityResults({
-              title: `⚙️ ${systemFieldLabelPlural} Covered`,
-              description: `Showing activities that include a ${systemFieldLabel.toLowerCase()} value.`,
-              activities: activitiesWithSystems,
-              exportFilename: `Dashboard_${systemFieldLabelPlural}_Covered.xlsx`,
-              filter: { kind: 'hasField', field: 'system' },
-            })
-          }
-          onKeyDown={(event) =>
-            handleDashboardCardKeyDown(event, () =>
-              openActivityResults({
-                title: `⚙️ ${systemFieldLabelPlural} Covered`,
-                description: `Showing activities that include a ${systemFieldLabel.toLowerCase()} value.`,
-                activities: activitiesWithSystems,
-                exportFilename: `Dashboard_${systemFieldLabelPlural}_Covered.xlsx`,
-                filter: { kind: 'hasField', field: 'system' },
-              })
-            )
-          }
-          role={onOpenActivityResults ? 'button' : undefined}
-          tabIndex={onOpenActivityResults ? 0 : undefined}
-        >
-          <div className="stat-icon">⚙️</div>
-          <div className="stat-content">
-            <h3>{systemFieldLabelPlural} Covered</h3>
-            <p className="stat-value">{stats.uniqueSystems}</p>
-          </div>
-        </div>
-
-        <div
-          className={`stat-card ${onOpenActivityResults ? 'dashboard-card-actionable' : ''}`}
-          onClick={() =>
-            openActivityResults({
-              title: '🏷️ Tags Used',
-              description: 'Showing activities that include a tag value.',
-              activities: activitiesWithTags,
-              exportFilename: 'Dashboard_Tags_Used.xlsx',
-              filter: { kind: 'hasField', field: 'tag' },
-            })
-          }
-          onKeyDown={(event) =>
-            handleDashboardCardKeyDown(event, () =>
-              openActivityResults({
-                title: '🏷️ Tags Used',
-                description: 'Showing activities that include a tag value.',
-                activities: activitiesWithTags,
-                exportFilename: 'Dashboard_Tags_Used.xlsx',
-                filter: { kind: 'hasField', field: 'tag' },
-              })
-            )
-          }
-          role={onOpenActivityResults ? 'button' : undefined}
-          tabIndex={onOpenActivityResults ? 0 : undefined}
-        >
-          <div className="stat-icon">🏷️</div>
-          <div className="stat-content">
-            <h3>Tags Used</h3>
-            <p className="stat-value">{stats.uniqueTags}</p>
-          </div>
-        </div>
-
-        <div
-          className={`stat-card ${onOpenActivityResults ? 'dashboard-card-actionable' : ''}`}
-          onClick={() =>
-            openActivityResults({
-              title: '👥 Team Members',
-              description: 'Showing activities performed by team admins, editors, and Other.',
-              activities: activitiesWithPerformers,
-              exportFilename: 'Dashboard_Team_Activities.xlsx',
-              filter: { kind: 'performerIn', performers: editorNames },
-            })
-          }
-          onKeyDown={(event) =>
-            handleDashboardCardKeyDown(event, () =>
-              openActivityResults({
-                title: '👥 Team Members',
-                description: 'Showing activities performed by team admins, editors, and Other.',
-                activities: activitiesWithPerformers,
-                exportFilename: 'Dashboard_Team_Activities.xlsx',
-                filter: { kind: 'performerIn', performers: editorNames },
-              })
-            )
-          }
-          role={onOpenActivityResults ? 'button' : undefined}
-          tabIndex={onOpenActivityResults ? 0 : undefined}
-        >
-          <div className="stat-icon">👥</div>
-          <div className="stat-content">
-            <h3>Team Members</h3>
-            <p className="stat-value">{stats.teamMembersCount}</p>
-          </div>
-        </div>
 
         <div
           className={`stat-card ${onOpenActivityResults ? 'dashboard-card-actionable' : ''}`}
@@ -662,7 +562,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           onClick={() =>
             openActivityResults({
               title: 'Recently Edited Activities',
-              description: 'Showing activities edited during the last 7 days.',
+              description: 'Showing the 20 most recently edited activities.',
               activities: recentlyEditedActivities,
               exportFilename: 'Dashboard_Recently_Edited_Activities.xlsx',
               filter: { kind: 'hasField', field: 'editedBy' },
@@ -672,7 +572,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             handleDashboardCardKeyDown(event, () =>
               openActivityResults({
                 title: 'Recently Edited Activities',
-                description: 'Showing activities edited during the last 7 days.',
+                description: 'Showing the 20 most recently edited activities.',
                 activities: recentlyEditedActivities,
                 exportFilename: 'Dashboard_Recently_Edited_Activities.xlsx',
                 filter: { kind: 'hasField', field: 'editedBy' },
@@ -750,6 +650,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             onEdit={onEdit}
             onDelete={onDelete}
             activeTeam={activeTeam}
+            settings={settings}
             isLoading={isLoading}
             canEdit={canEdit}
             canDelete={canDelete}

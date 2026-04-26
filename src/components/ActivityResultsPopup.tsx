@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { type Activity, type Team } from '../supabaseClient'
+import { type Activity, type Settings, type Team } from '../supabaseClient'
 import { exportActivitiesToExcel } from '../utils/excel'
 import { ActivityList } from './ActivityList'
 import { getSystemFieldLabel } from '../utils/teamActivityField'
@@ -11,6 +11,7 @@ interface ActivityResultsPopupProps {
   activities: Activity[]
   exportFilename?: string
   activeTeam?: Team | null
+  settings?: Settings
   onClose: () => void
   onEdit: (activity: Activity) => void
   onDelete: (id: string) => Promise<void>
@@ -36,6 +37,9 @@ function matchesKeyword(activity: Activity, keyword: string) {
     activity.date,
     activity.performer,
     activity.system,
+    activity.shift,
+    activity.permitNumber,
+    activity.instrumentType,
     activity.activityType || '',
     activity.tag,
     activity.problem,
@@ -51,6 +55,7 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
   activities,
   exportFilename,
   activeTeam,
+  settings,
   onClose,
   onEdit,
   onDelete,
@@ -88,6 +93,7 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
       const filename = await exportActivitiesToExcel(filteredActivities, {
         filename: exportFilename || `${title.replace(/\s+/g, '_')}.xlsx`,
         systemFieldLabel,
+        settings,
       })
       onExportSuccess?.(
         `Exported ${filteredActivities.length} activit${filteredActivities.length === 1 ? 'y' : 'ies'} to ${filename}.`
@@ -188,6 +194,7 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
             onEdit={onEdit}
             onDelete={onDelete}
             activeTeam={activeTeam}
+            settings={settings}
             isLoading={isLoading || isExporting}
             canEdit={canEdit}
             canDelete={canDelete}

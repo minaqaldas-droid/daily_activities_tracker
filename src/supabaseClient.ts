@@ -8,6 +8,7 @@ import {
 } from '@supabase/supabase-js'
 import { type ActivityTypeValue, getActivityTypeLabel } from './constants/activityTypes'
 import { formatDateForDisplay, normalizeDateForApp } from './utils/date'
+import { type ActivityFieldConfig } from './utils/activityFields'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -33,6 +34,9 @@ export interface Activity {
   date: string
   performer: string
   system: string
+  shift: string
+  permitNumber: string
+  instrumentType: string
   activityType: ActivityTypeValue | ''
   tag: string
   problem: string
@@ -92,6 +96,7 @@ export interface Settings {
   subheader_font_size?: string
   sidebar_font_family?: string
   sidebar_font_size?: string
+  activity_field_config?: ActivityFieldConfig
   updated_at?: string
   updated_by?: string
 }
@@ -104,6 +109,12 @@ export interface SearchFilters {
   activityType?: ActivityTypeValue | ''
   tag?: string
   system?: string
+  shift?: string
+  permitNumber?: string
+  instrumentType?: string
+  problem?: string
+  action?: string
+  comments?: string
   keyword?: string
   hasMoc?: boolean
 }
@@ -220,6 +231,19 @@ const DEFAULT_SETTINGS: Settings = {
   subheader_font_size: '1.5rem',
   sidebar_font_family: '',
   sidebar_font_size: '0.95rem',
+  activity_field_config: {
+    date: { enabled: true, required: true, order: 10 },
+    performer: { enabled: true, required: true, order: 20 },
+    system: { enabled: true, required: true, order: 30 },
+    shift: { enabled: false, required: false, order: 40 },
+    permitNumber: { enabled: false, required: false, order: 50 },
+    instrumentType: { enabled: false, required: false, order: 60 },
+    activityType: { enabled: true, required: true, order: 70 },
+    tag: { enabled: true, required: true, order: 80 },
+    problem: { enabled: true, required: true, order: 90 },
+    action: { enabled: true, required: true, order: 100 },
+    comments: { enabled: true, required: false, order: 110 },
+  },
 }
 
 export const LEGACY_AUTOMATION_TEAM: Team = {
@@ -255,6 +279,47 @@ function isMissingColumnError(error: unknown, columnName: string) {
       maybeError?.code === 'PGRST204' ||
       message.toLowerCase().includes(columnName.toLowerCase())
   )
+}
+
+function getUnknownErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (typeof error === 'string') {
+    return error
+  }
+
+  if (typeof error === 'object' && error) {
+    const maybeError = error as { message?: string; details?: string; hint?: string; code?: string }
+    const segments = [maybeError.message, maybeError.details, maybeError.hint, maybeError.code].filter(Boolean)
+
+    if (segments.length > 0) {
+      return segments.join(' | ')
+    }
+
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return String(error)
+    }
+  }
+
+  return String(error)
+}
+
+function getActivityWriteErrorMessage(error: unknown, action: 'create' | 'bulk create') {
+  const baseMessage = getUnknownErrorMessage(error)
+  const needsMigration =
+    isMissingColumnError(error, 'shift') ||
+    isMissingColumnError(error, 'permit_number') ||
+    isMissingColumnError(error, 'instrument_type')
+
+  if (needsMigration) {
+    return `${action === 'create' ? 'Create activity' : 'Bulk create activities'} failed because the database schema is outdated. Run migration/MIGRATION_ACTIVITY_FIELD_CONFIG.sql in Supabase SQL Editor. ${baseMessage}`
+  }
+
+  return `${action === 'create' ? 'Create activity' : 'Bulk create activities'} failed: ${baseMessage}`
 }
 
 function getActiveTeamOrLegacy(team?: Team | null) {
@@ -686,20 +751,50 @@ async function recordUserSignIn(userId: string) {
 }
 
 function getFormattedActivity(activity: Activity) {
-  return {
-    ...activity,
+  const formattedActivity: Record<string, unknown> = {
+    date: activity.date,
+    performer: activity.performer,
+    system: activity.system ?? '',
+    shift: activity.shift ?? '',
+    permit_number: activity.permitNumber ?? '',
+    instrument_type: activity.instrumentType ?? '',
     activityType: activity.activityType ?? '',
+    tag: activity.tag ?? '',
+    problem: activity.problem ?? '',
+    action: activity.action ?? '',
     comments: activity.comments ?? '',
     editedBy: activity.editedBy ?? null,
   }
+
+  if (activity.id) {
+    formattedActivity.id = activity.id
+  }
+
+  if (activity.created_at) {
+    formattedActivity.created_at = activity.created_at
+  }
+
+  if (activity.edited_at) {
+    formattedActivity.edited_at = activity.edited_at
+  }
+
+  return formattedActivity
 }
 
 function normalizeActivity(activity: Partial<Activity>): Activity {
+  const databaseActivity = activity as Partial<Activity> & {
+    permit_number?: string | null
+    instrument_type?: string | null
+  }
+
   return {
     id: activity.id,
     date: normalizeDateForApp(activity.date),
     performer: activity.performer ?? '',
     system: activity.system ?? '',
+    shift: activity.shift ?? '',
+    permitNumber: databaseActivity.permit_number ?? activity.permitNumber ?? '',
+    instrumentType: databaseActivity.instrument_type ?? activity.instrumentType ?? '',
     activityType: activity.activityType ?? '',
     tag: activity.tag ?? '',
     problem: activity.problem ?? '',
@@ -709,6 +804,26 @@ function normalizeActivity(activity: Partial<Activity>): Activity {
     created_at: activity.created_at,
     edited_at: activity.edited_at ?? null,
   }
+}
+
+function getActivityUpdatePayload(activity: Partial<Activity>) {
+  const payload: Record<string, unknown> = {}
+
+  if ('date' in activity) payload.date = activity.date
+  if ('performer' in activity) payload.performer = activity.performer
+  if ('system' in activity) payload.system = activity.system ?? ''
+  if ('shift' in activity) payload.shift = activity.shift ?? ''
+  if ('permitNumber' in activity) payload.permit_number = activity.permitNumber ?? ''
+  if ('instrumentType' in activity) payload.instrument_type = activity.instrumentType ?? ''
+  if ('activityType' in activity) payload.activityType = activity.activityType ?? ''
+  if ('tag' in activity) payload.tag = activity.tag ?? ''
+  if ('problem' in activity) payload.problem = activity.problem ?? ''
+  if ('action' in activity) payload.action = activity.action ?? ''
+  if ('comments' in activity) payload.comments = activity.comments ?? ''
+  if ('editedBy' in activity) payload.editedBy = activity.editedBy ?? null
+  if ('edited_at' in activity) payload.edited_at = activity.edited_at ?? null
+
+  return payload
 }
 
 function matchesSearchFilters(filters: SearchFilters) {
@@ -847,7 +962,7 @@ export async function createActivity(activity: Activity, team?: Team | null) {
     return data?.[0] ? normalizeActivity(data[0] as Partial<Activity>) : undefined
   } catch (error) {
     console.error('Error creating activity:', error)
-    throw error
+    throw new Error(getActivityWriteErrorMessage(error, 'create'))
   }
 }
 
@@ -873,16 +988,13 @@ export async function createActivities(activities: Activity[], team?: Team | nul
     return activities.length
   } catch (error) {
     console.error('Error bulk creating activities:', error)
-    throw error
+    throw new Error(getActivityWriteErrorMessage(error, 'bulk create'))
   }
 }
 
 export async function updateActivity(id: string, activity: Partial<Activity>, team?: Team | null) {
   try {
-    const updatePayload = {
-      ...activity,
-      comments: activity.comments ?? '',
-    }
+    const updatePayload = getActivityUpdatePayload(activity)
 
     if (!shouldUseLegacyTables(team)) {
       const activeTeam = getActiveTeamOrLegacy(team)
@@ -1782,6 +1894,30 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
       query = query.eq('system', filters.system)
     }
 
+    if (filters.shift) {
+      query = query.eq('shift', filters.shift)
+    }
+
+    if (filters.permitNumber) {
+      query = query.ilike('permit_number', `%${filters.permitNumber}%`)
+    }
+
+    if (filters.instrumentType) {
+      query = query.ilike('instrument_type', `%${filters.instrumentType}%`)
+    }
+
+    if (filters.problem) {
+      query = query.ilike('problem', `%${filters.problem}%`)
+    }
+
+    if (filters.action) {
+      query = query.ilike('action', `%${filters.action}%`)
+    }
+
+    if (filters.comments) {
+      query = query.ilike('comments', `%${filters.comments}%`)
+    }
+
     if (filters.activityType) {
       query = query.eq('activityType', filters.activityType)
     }
@@ -1805,6 +1941,9 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
           formatDateForDisplay(activity.date),
           activity.performer,
           activity.system,
+          activity.shift,
+          activity.permitNumber,
+          activity.instrumentType,
           activity.activityType,
           getActivityTypeLabel(activity.activityType),
           activity.tag,

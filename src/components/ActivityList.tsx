@@ -4,15 +4,16 @@ import {
   getActivityTypeLabel,
   getActivityTypeShortLabel,
 } from '../constants/activityTypes'
-import { type Activity, type Team } from '../supabaseClient'
+import { type Activity, type Settings, type Team } from '../supabaseClient'
+import { type ConfigurableActivityFieldKey, getEnabledActivityFields, getActivityFieldValue } from '../utils/activityFields'
 import { formatDateForDisplay } from '../utils/date'
-import { getSystemFieldLabel } from '../utils/teamActivityField'
 
 interface ActivityListProps {
   activities: Activity[]
   onEdit: (activity: Activity) => void
   onDelete: (id: string) => Promise<void>
   activeTeam?: Team | null
+  settings?: Settings
   isLoading?: boolean
   canEdit?: boolean
   canDelete?: boolean
@@ -21,22 +22,16 @@ interface ActivityListProps {
   emptyMessage?: string
 }
 
-type ColumnId =
-  | 'date'
-  | 'performer'
-  | 'type'
-  | 'system'
-  | 'tag'
-  | 'problem'
-  | 'action'
-  | 'comments'
-  | 'actions'
+type ColumnId = ConfigurableActivityFieldKey | 'actions'
 
-const COLUMN_ORDER: ColumnId[] = [
+const ALL_COLUMNS: ColumnId[] = [
   'date',
   'performer',
-  'type',
   'system',
+  'shift',
+  'permitNumber',
+  'instrumentType',
+  'activityType',
   'tag',
   'problem',
   'action',
@@ -47,8 +42,11 @@ const COLUMN_ORDER: ColumnId[] = [
 const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   date: 10,
   performer: 10,
-  type: 7,
   system: 9,
+  shift: 8,
+  permitNumber: 10,
+  instrumentType: 10,
+  activityType: 8,
   tag: 10,
   problem: 14,
   action: 18,
@@ -59,8 +57,11 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
 const MIN_COLUMN_WIDTHS: Record<ColumnId, number> = {
   date: 7,
   performer: 8,
-  type: 6,
   system: 7,
+  shift: 7,
+  permitNumber: 8,
+  instrumentType: 8,
+  activityType: 7,
   tag: 8,
   problem: 10,
   action: 12,
@@ -71,8 +72,11 @@ const MIN_COLUMN_WIDTHS: Record<ColumnId, number> = {
 const MAX_COLUMN_WIDTHS: Record<ColumnId, number> = {
   date: 24,
   performer: 24,
-  type: 20,
   system: 22,
+  shift: 18,
+  permitNumber: 24,
+  instrumentType: 24,
+  activityType: 18,
   tag: 22,
   problem: 30,
   action: 36,
@@ -82,11 +86,68 @@ const MAX_COLUMN_WIDTHS: Record<ColumnId, number> = {
 
 const COLUMN_WIDTHS_STORAGE_KEY = 'activity-table-column-widths'
 
+function getColumnLabel(columnId: ConfigurableActivityFieldKey) {
+  switch (columnId) {
+    case 'activityType':
+      return 'Activity Type'
+    case 'permitNumber':
+      return 'Permit Number'
+    case 'instrumentType':
+      return 'Instrument Type'
+    case 'action':
+      return 'Action'
+    case 'comments':
+      return 'Comments'
+    case 'performer':
+      return 'Performer'
+    case 'problem':
+      return 'Problem'
+    case 'tag':
+      return 'Tag'
+    case 'date':
+      return 'Date'
+    case 'shift':
+      return 'Shift'
+    case 'system':
+      return 'System'
+    default:
+      return columnId
+  }
+}
+
+function renderCellContent(activity: Activity, columnId: ConfigurableActivityFieldKey) {
+  switch (columnId) {
+    case 'date':
+      return <span className="date-badge">{formatDateForDisplay(activity.date)}</span>
+    case 'activityType':
+      return activity.activityType ? (
+        <span
+          className={`type-badge ${getActivityTypeBadgeClassName(activity.activityType)}`}
+          title={getActivityTypeLabel(activity.activityType)}
+        >
+          {getActivityTypeShortLabel(activity.activityType)}
+        </span>
+      ) : null
+    case 'system':
+    case 'shift':
+    case 'permitNumber':
+    case 'instrumentType':
+    case 'tag':
+      return <span className={columnId === 'tag' ? 'tag-badge' : 'system-badge'}>{getActivityFieldValue(activity, columnId) || '-'}</span>
+    case 'problem':
+    case 'action':
+    case 'comments':
+      return <div className="truncate">{getActivityFieldValue(activity, columnId) || '-'}</div>
+    default:
+      return getActivityFieldValue(activity, columnId) || '-'
+  }
+}
+
 export const ActivityList: React.FC<ActivityListProps> = ({
   activities,
   onEdit,
   onDelete,
-  activeTeam,
+  settings,
   isLoading = false,
   canEdit = true,
   canDelete = true,
@@ -97,7 +158,8 @@ export const ActivityList: React.FC<ActivityListProps> = ({
   const [columnWidths, setColumnWidths] = useState<Record<ColumnId, number>>(DEFAULT_COLUMN_WIDTHS)
   const [isResizing, setIsResizing] = useState(false)
   const tableContainerRef = useRef<HTMLDivElement | null>(null)
-  const systemFieldLabel = getSystemFieldLabel(activeTeam)
+  const visibleFieldColumns = getEnabledActivityFields(settings).map((field) => field.key)
+  const visibleColumns = useMemo<ColumnId[]>(() => [...visibleFieldColumns, 'actions'], [visibleFieldColumns])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -111,7 +173,7 @@ export const ActivityList: React.FC<ActivityListProps> = ({
       }
 
       const parsed = JSON.parse(raw) as Partial<Record<ColumnId, number>>
-      const merged = COLUMN_ORDER.reduce<Record<ColumnId, number>>((acc, key) => {
+      const merged = ALL_COLUMNS.reduce<Record<ColumnId, number>>((acc, key) => {
         const candidate = Number(parsed[key])
         acc[key] = Number.isFinite(candidate) ? candidate : DEFAULT_COLUMN_WIDTHS[key]
         return acc
@@ -132,16 +194,16 @@ export const ActivityList: React.FC<ActivityListProps> = ({
   }, [columnWidths])
 
   const normalizedColumnWidths = useMemo(() => {
-    const total = COLUMN_ORDER.reduce((sum, key) => sum + columnWidths[key], 0)
+    const total = visibleColumns.reduce((sum, key) => sum + columnWidths[key], 0)
     if (total <= 0) {
       return DEFAULT_COLUMN_WIDTHS
     }
 
-    return COLUMN_ORDER.reduce<Record<ColumnId, number>>((acc, key) => {
+    return visibleColumns.reduce<Record<ColumnId, number>>((acc, key) => {
       acc[key] = (columnWidths[key] / total) * 100
       return acc
     }, { ...DEFAULT_COLUMN_WIDTHS })
-  }, [columnWidths])
+  }, [columnWidths, visibleColumns])
 
   const handleColumnResizeStart = (columnId: ColumnId, event: React.MouseEvent<HTMLSpanElement>) => {
     event.preventDefault()
@@ -154,13 +216,13 @@ export const ActivityList: React.FC<ActivityListProps> = ({
 
     const startX = event.clientX
     const startWidths = { ...columnWidths }
-    const currentIndex = COLUMN_ORDER.indexOf(columnId)
-    const adjacentIndex = currentIndex < COLUMN_ORDER.length - 1 ? currentIndex + 1 : currentIndex - 1
+    const currentIndex = visibleColumns.indexOf(columnId)
+    const adjacentIndex = currentIndex < visibleColumns.length - 1 ? currentIndex + 1 : currentIndex - 1
     if (adjacentIndex < 0) {
       return
     }
 
-    const adjacentColumn = COLUMN_ORDER[adjacentIndex]
+    const adjacentColumn = visibleColumns[adjacentIndex]
     setIsResizing(true)
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -171,7 +233,6 @@ export const ActivityList: React.FC<ActivityListProps> = ({
       nextCurrent = Math.max(MIN_COLUMN_WIDTHS[columnId], Math.min(MAX_COLUMN_WIDTHS[columnId], nextCurrent))
 
       const appliedDelta = nextCurrent - startWidths[columnId]
-
       let nextAdjacent = startWidths[adjacentColumn] - appliedDelta
       nextAdjacent = Math.max(
         MIN_COLUMN_WIDTHS[adjacentColumn],
@@ -230,112 +291,56 @@ export const ActivityList: React.FC<ActivityListProps> = ({
     <div ref={tableContainerRef} className="table-container">
       <table className={`activities-table ${isResizing ? 'resizing-columns' : ''}`}>
         <colgroup>
-          {COLUMN_ORDER.map((columnId) => (
+          {visibleColumns.map((columnId) => (
             <col key={`col-${columnId}`} style={{ width: `${normalizedColumnWidths[columnId]}%` }} />
           ))}
         </colgroup>
         <thead>
           <tr>
-            <th className="col-date resizable-th">
-              Date
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('date', event)} />
-            </th>
-            <th className="col-performer resizable-th">
-              Performer
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('performer', event)} />
-            </th>
-            <th className="col-type resizable-th">
-              Type
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('type', event)} />
-            </th>
-            <th className="col-system resizable-th">
-              {systemFieldLabel}
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('system', event)} />
-            </th>
-            <th className="col-tag resizable-th">
-              Tag
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('tag', event)} />
-            </th>
-            <th className="col-problem resizable-th">
-              Problem
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('problem', event)} />
-            </th>
-            <th className="col-action resizable-th">
-              Action
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('action', event)} />
-            </th>
-            <th className="col-comments resizable-th">
-              Comments
-              <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart('comments', event)} />
-            </th>
-            <th className="col-actions resizable-th">
-              Edit/Delete
-            </th>
+            {visibleFieldColumns.map((columnId) => (
+              <th key={columnId} className="resizable-th">
+                {getColumnLabel(columnId)}
+                <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart(columnId, event)} />
+              </th>
+            ))}
+            <th className="col-actions resizable-th">Edit/Delete</th>
           </tr>
         </thead>
         <tbody>
           {activities.map((activity) => (
             <tr key={activity.id} className="activity-row">
-                  <td className="col-date" data-label="Date">
-                    <span className="date-badge">{formatDateForDisplay(activity.date)}</span>
-                  </td>
-                  <td className="col-performer" data-label="Performer">
-                    {activity.performer}
-                  </td>
-                  <td className="col-type" data-label="Type">
-                    {activity.activityType ? (
-                      <span
-                        className={`type-badge ${getActivityTypeBadgeClassName(activity.activityType)}`}
-                        title={getActivityTypeLabel(activity.activityType)}
-                      >
-                        {getActivityTypeShortLabel(activity.activityType)}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="col-system" data-label={systemFieldLabel}>
-                    <span className="system-badge">{activity.system}</span>
-                  </td>
-                  <td className="col-tag" data-label="Tag">
-                    <span className="tag-badge">{activity.tag}</span>
-                  </td>
-                  <td className="col-problem" data-label="Problem">
-                    <div className="truncate">{activity.problem}</div>
-                  </td>
-                  <td className="col-action" data-label="Action">
-                    <div className="truncate">{activity.action}</div>
-                  </td>
-                  <td className="col-comments" data-label="Comments">
-                    <div className="truncate">{activity.comments || '-'}</div>
-                  </td>
-                  <td className="col-actions" data-label="Edit / Delete">
-                    <div className="activity-action-buttons">
-                      <button
-                        type="button"
-                        className={`activity-action-button ${canEdit ? 'edit' : 'restricted'}`}
-                        onClick={() => {
-                          handleEdit(activity)
-                        }}
-                        disabled={isLoading}
-                        title={canEdit ? 'Edit activity' : 'Only Admin users can edit activities'}
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        type="button"
-                        className={`activity-action-button ${canDelete ? 'delete' : 'restricted'}`}
-                        onClick={() => {
-                          if (activity.id) {
-                            void handleDelete(activity.id)
-                          }
-                        }}
-                        disabled={isLoading}
-                        title={canDelete ? 'Delete activity' : 'Only Admin users can delete activities'}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+              {visibleFieldColumns.map((columnId) => (
+                <td key={columnId} data-label={getColumnLabel(columnId)}>
+                  {renderCellContent(activity, columnId)}
+                </td>
+              ))}
+              <td className="col-actions" data-label="Edit / Delete">
+                <div className="activity-action-buttons">
+                  <button
+                    type="button"
+                    className={`activity-action-button ${canEdit ? 'edit' : 'restricted'}`}
+                    onClick={() => handleEdit(activity)}
+                    disabled={isLoading}
+                    title={canEdit ? 'Edit activity' : 'Only Admin users can edit activities'}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    type="button"
+                    className={`activity-action-button ${canDelete ? 'delete' : 'restricted'}`}
+                    onClick={() => {
+                      if (activity.id) {
+                        void handleDelete(activity.id)
+                      }
+                    }}
+                    disabled={isLoading}
+                    title={canDelete ? 'Delete activity' : 'Only Admin users can delete activities'}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>

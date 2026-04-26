@@ -1,14 +1,15 @@
 import React, { useRef, useState } from 'react'
 import { normalizeImportedActivityType } from '../constants/activityTypes'
-import { type Activity, type Team, createActivities, createActivity } from '../supabaseClient'
+import { type Activity, type Settings, type Team, createActivities, createActivity } from '../supabaseClient'
+import { getActivityFieldConfig, getOrderedActivityFields } from '../utils/activityFields'
 import { parseImportedDate } from '../utils/date'
-import { getSystemFieldLabel } from '../utils/teamActivityField'
 
 interface ExcelImportProps {
   onImportSuccess: (result: ExcelImportResult) => void
   onImportError: (error: string) => void
   isLoading?: boolean
   activeTeam?: Team | null
+  settings?: Settings
 }
 
 export interface ExcelImportResult {
@@ -24,7 +25,10 @@ const IMPORT_CHUNK_SIZE = 100
 const COLUMN_ALIASES = {
   date: ['date', 'activitydate', 'workdate'],
   performer: ['performer', 'performedby', 'employee', 'engineer', 'technician', 'operator', 'name'],
-  system: ['system', 'shift', 'unit', 'area', 'department'],
+  system: ['system', 'unit', 'area', 'department'],
+  shift: ['shift'],
+  permitNumber: ['permitnumber', 'permit', 'permitno', 'permitnum'],
+  instrumentType: ['instrumenttype', 'instrumentclass', 'instrumentkind', 'devicetype', 'equipmenttype'],
   activityType: ['activitytype', 'type', 'maintenancetype', 'worktype', 'jobtype', 'category'],
   tag: ['tag', 'tagnumber', 'tagno', 'instrument', 'instrumenttag', 'instrumentnumber', 'equipment', 'asset'],
   problem: ['problem', 'issue', 'fault', 'description', 'problemstatement'],
@@ -112,11 +116,13 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
   onImportError,
   isLoading = false,
   activeTeam,
+  settings,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importProgress, setImportProgress] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
-  const systemFieldLabel = getSystemFieldLabel(activeTeam)
+  const activityFieldConfig = getActivityFieldConfig(settings)
+  const visibleFields = getOrderedActivityFields(settings).filter((field) => activityFieldConfig[field.key].enabled)
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -181,6 +187,9 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
           date: normalizeDate(getRowValue(normalizedRow, COLUMN_ALIASES.date)),
           performer: normalizeText(getRowValue(normalizedRow, COLUMN_ALIASES.performer)),
           system: normalizeText(getRowValue(normalizedRow, COLUMN_ALIASES.system)),
+          shift: normalizeText(getRowValue(normalizedRow, COLUMN_ALIASES.shift)),
+          permitNumber: normalizeText(getRowValue(normalizedRow, COLUMN_ALIASES.permitNumber)),
+          instrumentType: normalizeText(getRowValue(normalizedRow, COLUMN_ALIASES.instrumentType)),
           activityType,
           tag: normalizeText(getRowValue(normalizedRow, COLUMN_ALIASES.tag)),
           problem: normalizeText(getRowValue(normalizedRow, COLUMN_ALIASES.problem)),
@@ -219,7 +228,7 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
           } catch (rowError) {
             errorRows.push(
               `${activity.date || 'Empty date'} / ${activity.tag || 'Empty tag'}: ${
-                rowError instanceof Error ? rowError.message : 'Unknown error'
+                rowError instanceof Error ? rowError.message : String(rowError)
               }`
             )
           } finally {
@@ -247,7 +256,7 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
         console.warn('Import completed with warnings:', errorRows.slice(0, 20).join(' | '))
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to process Excel file.'
+      const message = error instanceof Error ? error.message : String(error)
       onImportError(message)
     } finally {
       if (fileInputRef.current) {
@@ -293,26 +302,38 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
           <table className="template-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Performer</th>
-                <th>Activity Type</th>
-                <th>{systemFieldLabel}</th>
-                <th>Tag</th>
-                <th>Problem</th>
-                <th>Action</th>
-                <th>Comments</th>
+                {visibleFields.map((field) => (
+                  <th key={field.key}>{field.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>3-Apr-2026</td>
-                <td>Ahmed Mohamed</td>
-                <td>PM</td>
-                <td>{systemFieldLabel === 'Shift' ? 'Shift A' : 'DCS'}</td>
-                <td>920TT305</td>
-                <td>Add H Alarm</td>
-                <td>Added H Alarm at 100C</td>
-                <td>Now Normal</td>
+                {visibleFields.map((field) => (
+                  <td key={field.key}>
+                    {field.key === 'date'
+                      ? '3-Apr-2026'
+                      : field.key === 'performer'
+                        ? 'Ahmed Mohamed'
+                        : field.key === 'system'
+                          ? 'DCS'
+                          : field.key === 'shift'
+                            ? 'Shift A'
+                            : field.key === 'permitNumber'
+                              ? 'PTW-2048'
+                              : field.key === 'instrumentType'
+                                ? 'Inst.'
+                                : field.key === 'activityType'
+                                  ? 'PM'
+                                  : field.key === 'tag'
+                                    ? '920TT305'
+                                    : field.key === 'problem'
+                                      ? 'Add H Alarm'
+                                      : field.key === 'action'
+                                        ? 'Added H Alarm at 100C'
+                                        : 'Now Normal'}
+                  </td>
+                ))}
               </tr>
             </tbody>
           </table>
