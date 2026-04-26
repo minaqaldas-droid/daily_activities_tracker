@@ -34,7 +34,7 @@ export interface ActivityFieldDefinition {
   tableBadge?: boolean
 }
 
-export const SHIFT_OPTIONS = ['Shift A', 'Shift B', 'Shift C', 'Shift D'] as const
+export const SHIFT_OPTIONS = ['A', 'B', 'C', 'D'] as const
 export const INSTRUMENT_TYPE_OPTIONS = ['Inst.', 'F&GS'] as const
 
 export const ACTIVITY_FIELD_DEFINITIONS: ActivityFieldDefinition[] = [

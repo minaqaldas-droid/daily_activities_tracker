@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS public.team_settings (
   sidebar_font_family TEXT NOT NULL DEFAULT '',
   sidebar_font_size TEXT NOT NULL DEFAULT '0.95rem',
   activity_field_config JSONB NOT NULL DEFAULT '{"date": {"enabled": true, "required": true, "order": 10}, "performer": {"enabled": true, "required": true, "order": 20}, "system": {"enabled": true, "required": true, "order": 30}, "shift": {"enabled": false, "required": false, "order": 40}, "permitNumber": {"enabled": false, "required": false, "order": 50}, "instrumentType": {"enabled": false, "required": false, "order": 60}, "activityType": {"enabled": true, "required": true, "order": 70}, "tag": {"enabled": true, "required": true, "order": 80}, "problem": {"enabled": true, "required": true, "order": 90}, "action": {"enabled": true, "required": true, "order": 100}, "comments": {"enabled": true, "required": false, "order": 110}}'::jsonb,
+  dashboard_chart_config JSONB NOT NULL DEFAULT '{"activityType": {"enabled": true, "order": 1}, "performer": {"enabled": true, "order": 2}, "system": {"enabled": true, "order": 3}, "shift": {"enabled": true, "order": 4}, "instrumentType": {"enabled": true, "order": 5}, "topTags": {"enabled": true, "order": 6}}'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
   updated_by UUID REFERENCES public.users(id) ON DELETE SET NULL
 );
@@ -236,6 +237,7 @@ INSERT INTO public.team_settings (
   subheader_font_size,
   sidebar_font_family,
   sidebar_font_size,
+  dashboard_chart_config,
   updated_at,
   updated_by
 )
@@ -253,6 +255,10 @@ SELECT
   COALESCE(legacy_settings.subheader_font_size, '1.5rem'),
   COALESCE(legacy_settings.sidebar_font_family, ''),
   COALESCE(legacy_settings.sidebar_font_size, '0.95rem'),
+  COALESCE(
+    legacy_settings.dashboard_chart_config,
+    '{"activityType": {"enabled": true, "order": 1}, "performer": {"enabled": true, "order": 2}, "system": {"enabled": true, "order": 3}, "shift": {"enabled": true, "order": 4}, "instrumentType": {"enabled": true, "order": 5}, "topTags": {"enabled": true, "order": 6}}'::jsonb
+  ),
   COALESCE(legacy_settings.updated_at, timezone('utc', now())),
   legacy_settings.updated_by
 FROM (
@@ -281,6 +287,7 @@ SET
   subheader_font_size = EXCLUDED.subheader_font_size,
   sidebar_font_family = EXCLUDED.sidebar_font_family,
   sidebar_font_size = EXCLUDED.sidebar_font_size,
+  dashboard_chart_config = EXCLUDED.dashboard_chart_config,
   updated_at = EXCLUDED.updated_at,
   updated_by = EXCLUDED.updated_by
 WHERE public.team_settings.updated_by IS NULL;

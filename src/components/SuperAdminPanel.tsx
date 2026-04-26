@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { type Settings, type Team, type User, updateSettings, uploadBrandingAsset } from '../supabaseClient'
 import { getActivityFieldConfig, getOrderedActivityFields, type ConfigurableActivityFieldKey } from '../utils/activityFields'
+import {
+  getDashboardChartConfig,
+  getOrderedDashboardCharts,
+  type DashboardChartKey,
+} from '../utils/dashboardCharts'
 
 interface AdminPanelProps {
   user: User
@@ -32,6 +37,19 @@ function normalizeSequentialOrder(settings: Settings) {
   }, { ...normalizedConfig })
 }
 
+function normalizeSequentialChartOrder(settings: Settings) {
+  const normalizedConfig = getDashboardChartConfig(settings)
+  const orderedCharts = getOrderedDashboardCharts({ ...settings, dashboard_chart_config: normalizedConfig })
+
+  return orderedCharts.reduce<typeof normalizedConfig>((accumulator, chart, index) => {
+    accumulator[chart.key] = {
+      ...normalizedConfig[chart.key],
+      order: index + 1,
+    }
+    return accumulator
+  }, { ...normalizedConfig })
+}
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   user,
   activeTeam,
@@ -51,6 +69,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [sidebarFontFamily, setSidebarFontFamily] = useState('')
   const [sidebarFontSize, setSidebarFontSize] = useState('0.95rem')
   const [activityFieldConfig, setActivityFieldConfig] = useState(normalizeSequentialOrder(currentSettings))
+  const [dashboardChartConfig, setDashboardChartConfig] = useState(normalizeSequentialChartOrder(currentSettings))
   const [logoPreview, setLogoPreview] = useState('')
   const [faviconPreview, setFaviconPreview] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -59,6 +78,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const orderedFields = getOrderedActivityFields({ ...currentSettings, activity_field_config: activityFieldConfig })
+  const orderedCharts = getOrderedDashboardCharts({ ...currentSettings, dashboard_chart_config: dashboardChartConfig })
 
   useEffect(() => {
     setWebappName(currentSettings.webapp_name || 'Daily Activities Tracker')
@@ -71,6 +91,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSidebarFontFamily(currentSettings.sidebar_font_family || '')
     setSidebarFontSize(currentSettings.sidebar_font_size || '0.95rem')
     setActivityFieldConfig(normalizeSequentialOrder(currentSettings))
+    setDashboardChartConfig(normalizeSequentialChartOrder(currentSettings))
     setLogoPreview(currentSettings.logo_url || '')
     setFaviconPreview(currentSettings.favicon_url || currentSettings.logo_url || '')
     setLogoFile(null)
@@ -147,6 +168,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           sidebar_font_family: sidebarFontFamily.trim(),
           sidebar_font_size: sidebarFontSize.trim(),
           activity_field_config: activityFieldConfig,
+          dashboard_chart_config: dashboardChartConfig,
         },
         user.id,
         activeTeam
@@ -205,6 +227,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       [targetField.key]: {
         ...previous[targetField.key],
         order: previous[currentField.key].order,
+      },
+    }))
+  }
+
+  const handleChartEnabledChange = (chartKey: DashboardChartKey, enabled: boolean) => {
+    setDashboardChartConfig((previous) => ({
+      ...previous,
+      [chartKey]: {
+        enabled,
+        order: previous[chartKey].order,
+      },
+    }))
+  }
+
+  const moveChart = (chartKey: DashboardChartKey, direction: -1 | 1) => {
+    const currentIndex = orderedCharts.findIndex((chart) => chart.key === chartKey)
+    const targetIndex = currentIndex + direction
+
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedCharts.length) {
+      return
+    }
+
+    const currentChart = orderedCharts[currentIndex]
+    const targetChart = orderedCharts[targetIndex]
+
+    setDashboardChartConfig((previous) => ({
+      ...previous,
+      [currentChart.key]: {
+        ...previous[currentChart.key],
+        order: previous[targetChart.key].order,
+      },
+      [targetChart.key]: {
+        ...previous[targetChart.key],
+        order: previous[currentChart.key].order,
       },
     }))
   }
@@ -430,6 +486,61 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           className="btn btn-secondary"
                           onClick={() => moveField(field.key, 1)}
                           disabled={isSubmitting || isLoading || index === orderedFields.length - 1}
+                        >
+                          Move Down
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {user.is_superadmin && (
+            <div className="form-group">
+              <label>Dashboard Charts</label>
+              <div className="team-activity-fields-grid">
+                {orderedCharts.map((chart, index) => (
+                  <div key={chart.key} className="team-activity-field-card">
+                    <strong className="team-activity-field-title">{chart.label}</strong>
+                    <div className="radio-group admin-performer-row dashboard-chart-admin-row">
+                      <label className="radio-option dashboard-chart-admin-option">
+                        <span className="radio-label admin-performer-option-label dashboard-chart-admin-label">
+                          <span>Visible on this team dashboard</span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={dashboardChartConfig[chart.key].enabled}
+                          onChange={(event) => handleChartEnabledChange(chart.key, event.target.checked)}
+                          disabled={isSubmitting || isLoading}
+                        />
+                      </label>
+                    </div>
+                    <div className="team-activity-field-order-row">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={index + 1}
+                        readOnly
+                        disabled={isSubmitting || isLoading}
+                        className="team-activity-field-order-input"
+                      />
+                      <div className="team-activity-field-move-buttons">
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => moveChart(chart.key, -1)}
+                          disabled={isSubmitting || isLoading || index === 0}
+                        >
+                          Move Up
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => moveChart(chart.key, 1)}
+                          disabled={isSubmitting || isLoading || index === orderedCharts.length - 1}
                         >
                           Move Down
                         </button>

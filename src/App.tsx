@@ -179,6 +179,10 @@ function matchesResultsPopupFilter(activity: Activity, filter?: ResultsPopupFilt
       return (activity.activityType || '') === filter.activityType
     case 'system':
       return (activity.system || '') === filter.system
+    case 'shift':
+      return (activity.shift || '') === filter.shift
+    case 'instrumentType':
+      return (activity.instrumentType || '') === filter.instrumentType
     case 'tag':
       return (activity.tag || '') === filter.tag
     default:

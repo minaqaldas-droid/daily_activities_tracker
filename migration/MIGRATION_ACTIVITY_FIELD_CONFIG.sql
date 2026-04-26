@@ -21,6 +21,14 @@ ALTER TABLE public.settings
     "problem": { "enabled": true, "required": true, "order": 90 },
     "action": { "enabled": true, "required": true, "order": 100 },
     "comments": { "enabled": true, "required": false, "order": 110 }
+  }'::jsonb,
+  ADD COLUMN IF NOT EXISTS dashboard_chart_config JSONB NOT NULL DEFAULT '{
+    "activityType": { "enabled": true, "order": 1 },
+    "performer": { "enabled": true, "order": 2 },
+    "system": { "enabled": true, "order": 3 },
+    "shift": { "enabled": true, "order": 4 },
+    "instrumentType": { "enabled": true, "order": 5 },
+    "topTags": { "enabled": true, "order": 6 }
   }'::jsonb;
 
 ALTER TABLE public.team_settings
@@ -36,6 +44,14 @@ ALTER TABLE public.team_settings
     "problem": { "enabled": true, "required": true, "order": 90 },
     "action": { "enabled": true, "required": true, "order": 100 },
     "comments": { "enabled": true, "required": false, "order": 110 }
+  }'::jsonb,
+  ADD COLUMN IF NOT EXISTS dashboard_chart_config JSONB NOT NULL DEFAULT '{
+    "activityType": { "enabled": true, "order": 1 },
+    "performer": { "enabled": true, "order": 2 },
+    "system": { "enabled": true, "order": 3 },
+    "shift": { "enabled": true, "order": 4 },
+    "instrumentType": { "enabled": true, "order": 5 },
+    "topTags": { "enabled": true, "order": 6 }
   }'::jsonb;
 
 UPDATE public.settings
@@ -90,6 +106,62 @@ SET activity_field_config = jsonb_build_object(
   'problem', jsonb_build_object('enabled', true, 'required', true, 'order', 90),
   'action', jsonb_build_object('enabled', true, 'required', true, 'order', 100),
   'comments', jsonb_build_object('enabled', true, 'required', false, 'order', 110)
+);
+
+UPDATE public.settings
+SET dashboard_chart_config = jsonb_build_object(
+  'activityType', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'activityType' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'activityType' ->> 'order')::integer, 1)
+  ),
+  'performer', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'performer' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'performer' ->> 'order')::integer, 2)
+  ),
+  'system', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'system' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'system' ->> 'order')::integer, 3)
+  ),
+  'shift', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'shift' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'shift' ->> 'order')::integer, 4)
+  ),
+  'instrumentType', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'instrumentType' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'instrumentType' ->> 'order')::integer, 5)
+  ),
+  'topTags', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'topTags' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'topTags' ->> 'order')::integer, 6)
+  )
+);
+
+UPDATE public.team_settings
+SET dashboard_chart_config = jsonb_build_object(
+  'activityType', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'activityType' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'activityType' ->> 'order')::integer, 1)
+  ),
+  'performer', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'performer' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'performer' ->> 'order')::integer, 2)
+  ),
+  'system', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'system' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'system' ->> 'order')::integer, 3)
+  ),
+  'shift', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'shift' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'shift' ->> 'order')::integer, 4)
+  ),
+  'instrumentType', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'instrumentType' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'instrumentType' ->> 'order')::integer, 5)
+  ),
+  'topTags', jsonb_build_object(
+    'enabled', COALESCE((dashboard_chart_config -> 'topTags' ->> 'enabled')::boolean, true),
+    'order', COALESCE((dashboard_chart_config -> 'topTags' ->> 'order')::integer, 6)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_activities_shift ON public.activities(shift);

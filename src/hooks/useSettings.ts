@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { type Settings, type Team, getSettings } from '../supabaseClient'
 import { DEFAULT_ACTIVITY_FIELD_CONFIG } from '../utils/activityFields'
+import { DEFAULT_DASHBOARD_CHART_CONFIG } from '../utils/dashboardCharts'
 
 const DEFAULT_SETTINGS: Settings = {
   webapp_name: 'Daily Activities Tracker',
@@ -16,6 +17,7 @@ const DEFAULT_SETTINGS: Settings = {
   sidebar_font_family: '',
   sidebar_font_size: '0.95rem',
   activity_field_config: DEFAULT_ACTIVITY_FIELD_CONFIG,
+  dashboard_chart_config: DEFAULT_DASHBOARD_CHART_CONFIG,
 }
 
 const DEFAULT_FAVICON_PATH = '/favicon.svg'

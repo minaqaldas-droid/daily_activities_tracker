@@ -9,6 +9,7 @@ import {
 import { type ActivityTypeValue, getActivityTypeLabel } from './constants/activityTypes'
 import { formatDateForDisplay, normalizeDateForApp } from './utils/date'
 import { type ActivityFieldConfig } from './utils/activityFields'
+import { type DashboardChartConfig } from './utils/dashboardCharts'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -97,6 +98,7 @@ export interface Settings {
   sidebar_font_family?: string
   sidebar_font_size?: string
   activity_field_config?: ActivityFieldConfig
+  dashboard_chart_config?: DashboardChartConfig
   updated_at?: string
   updated_by?: string
 }
@@ -243,6 +245,14 @@ const DEFAULT_SETTINGS: Settings = {
     problem: { enabled: true, required: true, order: 90 },
     action: { enabled: true, required: true, order: 100 },
     comments: { enabled: true, required: false, order: 110 },
+  },
+  dashboard_chart_config: {
+    activityType: { enabled: true, order: 1 },
+    performer: { enabled: true, order: 2 },
+    system: { enabled: true, order: 3 },
+    shift: { enabled: true, order: 4 },
+    instrumentType: { enabled: true, order: 5 },
+    topTags: { enabled: true, order: 6 },
   },
 }
 

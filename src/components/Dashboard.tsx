@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
-import { type Activity, type Settings, type Team, getEditors, getEditorsCount } from '../supabaseClient'
-import { getSystemFieldLabel, getSystemFieldLabelPlural } from '../utils/teamActivityField'
+import { type Activity, type Settings, type Team } from '../supabaseClient'
+import { type DashboardChartKey, getEnabledDashboardCharts } from '../utils/dashboardCharts'
+import { getSystemFieldLabel } from '../utils/teamActivityField'
 import { ActivityList } from './ActivityList'
 
 export type DashboardResultsFilter =
@@ -12,6 +13,8 @@ export type DashboardResultsFilter =
   | { kind: 'sinceDate'; sinceDate: string }
   | { kind: 'activityType'; activityType: string }
   | { kind: 'system'; system: string }
+  | { kind: 'shift'; shift: string }
+  | { kind: 'instrumentType'; instrumentType: string }
   | { kind: 'tag'; tag: string }
 
 export interface DashboardActivityRequest {
@@ -40,15 +43,14 @@ interface DashboardProps {
 interface DashboardStats {
   totalActivities: number
   myActivities: number
-  uniqueTags: number
-  uniqueSystems: number
   activityByPerformer: Map<string, number>
   activityByTag: Map<string, number>
   activityBySystem: Map<string, number>
+  activityByShift: Map<string, number>
+  activityByInstrumentType: Map<string, number>
   activityByType: Map<string, number>
   recentActivities: Activity[]
   recentlyEditedActivities: Activity[]
-  teamMembersCount: number
   thisWeekActivities: number
 }
 
@@ -98,6 +100,11 @@ function createActivityTypeChartData(source: Map<string, number>) {
   }
 
   return data.sort((a, b) => b.value - a.value)
+}
+
+function incrementCounter(map: Map<string, number>, rawValue: string | null | undefined) {
+  const key = String(rawValue || '')
+  map.set(key, (map.get(key) || 0) + 1)
 }
 
 function handleDashboardCardKeyDown(
@@ -287,78 +294,37 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [stats, setStats] = useState<DashboardStats>({
     totalActivities: 0,
     myActivities: 0,
-    uniqueTags: 0,
-    uniqueSystems: 0,
     activityByPerformer: new Map<string, number>(),
     activityByTag: new Map<string, number>(),
     activityBySystem: new Map<string, number>(),
+    activityByShift: new Map<string, number>(),
+    activityByInstrumentType: new Map<string, number>(),
     activityByType: new Map<string, number>(),
     recentActivities: [],
     recentlyEditedActivities: [],
-    teamMembersCount: 0,
     thisWeekActivities: 0,
   })
-  const [editorNames, setEditorNames] = useState<string[]>([])
   const [topTagsLimit, setTopTagsLimit] = useState<10 | 20 | 30 | 50 | 100>(20)
   const systemFieldLabel = getSystemFieldLabel(activeTeam)
-  const systemFieldLabelPlural = getSystemFieldLabelPlural(activeTeam)
-
-  useEffect(() => {
-    let isMounted = true
-
-    void getEditorsCount(activeTeam)
-      .then((count) => {
-        if (!isMounted) {
-          return
-        }
-
-        setStats((previous) => ({
-          ...previous,
-          teamMembersCount: count,
-        }))
-      })
-      .catch((error) => {
-        console.error('Failed to load editors count:', error)
-      })
-
-    void getEditors(activeTeam)
-      .then((editors) => {
-        if (!isMounted) {
-          return
-        }
-
-        setEditorNames((editors || []).map((editor) => editor.name))
-      })
-      .catch((error) => {
-        console.error('Failed to load editors list:', error)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [activeTeam])
 
   useEffect(() => {
     const activityByPerformer = new Map<string, number>()
     const activityByTag = new Map<string, number>()
     const activityBySystem = new Map<string, number>()
+    const activityByShift = new Map<string, number>()
+    const activityByInstrumentType = new Map<string, number>()
     const activityByType = new Map<string, number>()
 
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-
     let weekCount = 0
 
     activities.forEach((activity) => {
-      const normalizedPerformer = String(activity.performer || '').trim()
-
-      if (!normalizedPerformer) {
-        activityByPerformer.set('', (activityByPerformer.get('') || 0) + 1)
-      } else if (normalizedPerformer === 'Other' || editorNames.includes(normalizedPerformer)) {
-        activityByPerformer.set(activity.performer, (activityByPerformer.get(activity.performer) || 0) + 1)
-      }
-      activityByTag.set(activity.tag, (activityByTag.get(activity.tag) || 0) + 1)
-      activityBySystem.set(activity.system, (activityBySystem.get(activity.system) || 0) + 1)
-      activityByType.set(activity.activityType || '', (activityByType.get(activity.activityType || '') || 0) + 1)
+      incrementCounter(activityByPerformer, activity.performer)
+      incrementCounter(activityByTag, activity.tag)
+      incrementCounter(activityBySystem, activity.system)
+      incrementCounter(activityByShift, activity.shift)
+      incrementCounter(activityByInstrumentType, activity.instrumentType)
+      incrementCounter(activityByType, activity.activityType || '')
 
       if (activity.date >= weekAgo) {
         weekCount += 1
@@ -376,35 +342,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
       })
       .slice(0, 20)
 
-    setStats((current) => ({
+    setStats({
       totalActivities: activities.length,
       myActivities,
-      uniqueTags: activityByTag.size,
-      uniqueSystems: activityBySystem.size,
       activityByPerformer,
       activityByTag,
       activityBySystem,
+      activityByShift,
+      activityByInstrumentType,
       activityByType,
       recentActivities,
       recentlyEditedActivities,
-      teamMembersCount: current.teamMembersCount,
       thisWeekActivities: weekCount,
-    }))
-  }, [activities, editorNames, performerName])
+    })
+  }, [activities, performerName])
 
   const systemChartData = createChartData(stats.activityBySystem)
   const performerChartData = createChartData(stats.activityByPerformer)
+  const shiftChartData = createChartData(stats.activityByShift)
+  const instrumentTypeChartData = createChartData(stats.activityByInstrumentType)
   const activityTypeChartData = createActivityTypeChartData(stats.activityByType)
   const tagChartData = createChartData(stats.activityByTag).slice(0, topTagsLimit)
   const thisWeekSinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const myActivitiesList = activities.filter((activity) => activity.performer === performerName)
-  const activitiesWithSystems = activities.filter((activity) => Boolean(activity.system))
-  const activitiesWithTags = activities.filter((activity) => Boolean(activity.tag))
-  const activitiesWithPerformers = activities.filter((activity) =>
-    activity.performer === 'Other' || editorNames.includes(activity.performer || '')
-  )
   const recentlyEditedActivities = stats.recentlyEditedActivities
   const thisWeekActivitiesList = activities.filter((activity) => activity.date >= thisWeekSinceDate)
+  const enabledCharts = useMemo(() => getEnabledDashboardCharts(settings), [settings])
 
   const openActivityResults = (request: DashboardActivityRequest) => {
     onOpenActivityResults?.(request)
@@ -441,6 +404,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
     })
   }
 
+  const openShiftResults = (item: ChartDatum) => {
+    openActivityResults({
+      title: `🌙 ${item.label}`,
+      description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for shift ${item.label}.`,
+      activities: activities.filter((activity) => (activity.shift || '') === item.key),
+      exportFilename: `Dashboard_Shift_${item.label.replace(/\s+/g, '_')}.xlsx`,
+      filter: { kind: 'shift', shift: item.key },
+    })
+  }
+
+  const openInstrumentTypeResults = (item: ChartDatum) => {
+    openActivityResults({
+      title: `🎛️ ${item.label}`,
+      description: `Showing ${item.value} activit${item.value === 1 ? 'y' : 'ies'} for instrument type ${item.label}.`,
+      activities: activities.filter((activity) => (activity.instrumentType || '') === item.key),
+      exportFilename: `Dashboard_Instrument_Type_${item.label.replace(/\s+/g, '_')}.xlsx`,
+      filter: { kind: 'instrumentType', instrumentType: item.key },
+    })
+  }
+
   const openTagResults = (item: ChartDatum) => {
     openActivityResults({
       title: `🏷️ ${item.label}`,
@@ -449,6 +432,79 @@ export const Dashboard: React.FC<DashboardProps> = ({
       exportFilename: `Dashboard_Tag_${item.label.replace(/\s+/g, '_')}.xlsx`,
       filter: { kind: 'tag', tag: item.key },
     })
+  }
+
+  const chartCards: Record<DashboardChartKey, React.ReactNode> = {
+    activityType: (
+      <PieChartCard
+        icon="🧰"
+        title="Activities by Type"
+        data={activityTypeChartData}
+        total={stats.totalActivities}
+        onValueSelect={openActivityTypeResults}
+      />
+    ),
+    performer: (
+      <PieChartCard
+        icon="👥"
+        title="Activities by Performer"
+        data={performerChartData}
+        total={stats.totalActivities}
+        onValueSelect={openPerformerResults}
+      />
+    ),
+    system: (
+      <PieChartCard
+        icon="⚙️"
+        title={`Activities by ${systemFieldLabel}`}
+        data={systemChartData}
+        total={stats.totalActivities}
+        onValueSelect={openSystemResults}
+        className="system-chart-card"
+      />
+    ),
+    shift: (
+      <PieChartCard
+        icon="🌙"
+        title="Activities by Shift"
+        data={shiftChartData}
+        total={stats.totalActivities}
+        onValueSelect={openShiftResults}
+      />
+    ),
+    instrumentType: (
+      <PieChartCard
+        icon="🎛️"
+        title="Activities by Instrument Type"
+        data={instrumentTypeChartData}
+        total={stats.totalActivities}
+        onValueSelect={openInstrumentTypeResults}
+      />
+    ),
+    topTags: (
+      <BarChartCard
+        icon="🏷️"
+        title="Top Tags"
+        data={tagChartData}
+        onValueSelect={openTagResults}
+        className="top-tags-chart-card"
+        controls={
+          <label className="dashboard-chart-select">
+            <span>Show</span>
+            <select
+              value={topTagsLimit}
+              onChange={(event) => setTopTagsLimit(Number(event.target.value) as 10 | 20 | 30 | 50 | 100)}
+            >
+              {[10, 20, 30, 50, 100].map((option) => (
+                <option key={option} value={option}>
+                  Top {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        }
+      />
+    ),
   }
 
   return (
@@ -525,7 +581,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-
         <div
           className={`stat-card ${onOpenActivityResults ? 'dashboard-card-actionable' : ''}`}
           onClick={() =>
@@ -557,6 +612,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <p className="stat-value">{stats.thisWeekActivities}</p>
           </div>
         </div>
+
         <div
           className={`stat-card ${onOpenActivityResults ? 'dashboard-card-actionable' : ''}`}
           onClick={() =>
@@ -591,50 +647,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="dashboard-chart-grid">
-        <PieChartCard
-          icon="🧰"
-          title="Activities by Type"
-          data={activityTypeChartData}
-          total={stats.totalActivities}
-          onValueSelect={openActivityTypeResults}
-        />
-        <PieChartCard
-          icon="👥"
-          title="Activities by Performer"
-          data={performerChartData}
-          total={stats.totalActivities}
-          onValueSelect={openPerformerResults}
-        />
-        <PieChartCard
-          icon="⚙️"
-          title={`Activities by ${systemFieldLabel}`}
-          data={systemChartData}
-          total={stats.totalActivities}
-          onValueSelect={openSystemResults}
-          className="system-chart-card"
-        />
-        <BarChartCard
-          icon="🏷️"
-          title="Top Tags"
-          data={tagChartData}
-          onValueSelect={openTagResults}
-          className="top-tags-chart-card"
-          controls={
-            <label className="dashboard-chart-select">
-              <span>Show</span>
-              <select
-                value={topTagsLimit}
-                onChange={(event) => setTopTagsLimit(Number(event.target.value) as 10 | 20 | 30 | 50 | 100)}
-              >
-                {[10, 20, 30, 50, 100].map((option) => (
-                  <option key={option} value={option}>
-                    Top {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-          }
-        />
+        {enabledCharts.map((chart) => (
+          <React.Fragment key={chart.key}>{chartCards[chart.key]}</React.Fragment>
+        ))}
       </div>
 
       {stats.recentActivities.length > 0 && onEdit && onDelete && (
@@ -659,7 +674,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           />
         </div>
       )}
-
     </div>
   )
 }

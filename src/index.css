@@ -3246,6 +3246,39 @@ body.modal-open {
   margin: 0;
 }
 
+.dashboard-chart-admin-row {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.dashboard-chart-admin-option {
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  gap: 16px;
+}
+
+.dashboard-chart-admin-option:hover {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.dashboard-chart-admin-option input[type="checkbox"] {
+  margin-top: 0;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.dashboard-chart-admin-label {
+  flex: 1;
+  justify-content: center;
+}
+
 @media (max-width: 768px) {
   .admin-performer-row {
     flex-direction: column;
@@ -3255,6 +3288,10 @@ body.modal-open {
 
   .admin-performer-row .radio-option {
     flex-basis: auto;
+  }
+
+  .dashboard-chart-admin-option {
+    padding: 16px 18px;
   }
 
   .team-activity-field-order-row {
