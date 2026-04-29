@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.team_activities (
   shift TEXT NOT NULL DEFAULT '',
   permit_number TEXT NOT NULL DEFAULT '',
   instrument_type TEXT NOT NULL DEFAULT '',
-  "activityType" TEXT NOT NULL DEFAULT '' CHECK ("activityType" IN ('', 'PM', 'CM', 'Mod')),
+  "activityType" TEXT NOT NULL DEFAULT '' CHECK ("activityType" IN ('', 'PM', 'CM', 'Mod', 'SD Activity')),
   tag TEXT NOT NULL DEFAULT '',
   problem TEXT NOT NULL,
   action TEXT NOT NULL,

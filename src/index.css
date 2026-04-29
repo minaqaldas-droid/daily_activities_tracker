@@ -1047,6 +1047,11 @@ body.modal-open {
   color: #1d4ed8;
 }
 
+.type-badge.type-sd {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
 .type-badge.type-unknown {
   background: #e5e7eb;
   color: #4b5563;

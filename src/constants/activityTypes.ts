@@ -14,6 +14,11 @@ export const ACTIVITY_TYPE_OPTIONS = [
     shortLabel: 'Mod',
     label: 'Mod (Modification)',
   },
+  {
+    value: 'SD Activity',
+    shortLabel: 'SD',
+    label: 'SD Activity',
+  },
 ] as const
 
 export type ActivityTypeValue = (typeof ACTIVITY_TYPE_OPTIONS)[number]['value']
@@ -38,6 +43,8 @@ export function getActivityTypeBadgeClassName(value?: string | null) {
       return 'type-cm'
     case 'Mod':
       return 'type-mod'
+    case 'SD Activity':
+      return 'type-sd'
     default:
       return 'type-unknown'
   }
@@ -60,6 +67,10 @@ export function normalizeImportedActivityType(value: string): ActivityTypeValue 
 
   if (normalized === 'mod' || normalized === 'modification') {
     return 'Mod'
+  }
+
+  if (normalized === 'sdactivity' || normalized === 'sd') {
+    return 'SD Activity'
   }
 
   return ''
