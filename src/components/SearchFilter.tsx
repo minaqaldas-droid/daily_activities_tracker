@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { type ActivityTypeValue, ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
-import { getEditors, type SearchFilters, type Settings, type Team } from '../supabaseClient'
+import { type SearchFilters, type Settings, type Team } from '../supabaseClient'
 import {
   type ConfigurableActivityFieldKey,
   getEnabledActivityFields,
@@ -24,8 +24,6 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
   const [singleDate, setSingleDate] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [performers, setPerformers] = useState<Array<{ id: string; name: string; email: string }>>([])
-  const [isLoadingPerformers, setIsLoadingPerformers] = useState(false)
   const [fieldValues, setFieldValues] = useState<DynamicFilterValues>({})
   const [hasMoc, setHasMoc] = useState(false)
   const systemFieldOptions = getSystemFieldOptions(activeTeam)
@@ -36,32 +34,6 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
     (field) => field.key !== 'date' && visibleFields.some((visibleField) => visibleField.key === field.key)
   )
   const commentsFieldVisible = visibleFields.some((field) => field.key === 'comments')
-
-  useEffect(() => {
-    let isMounted = true
-
-    const loadPerformers = async () => {
-      try {
-        setIsLoadingPerformers(true)
-        const users = await getEditors(activeTeam)
-        if (isMounted) {
-          setPerformers(users || [])
-        }
-      } catch (error) {
-        console.error('Failed to load performers for search:', error)
-      } finally {
-        if (isMounted) {
-          setIsLoadingPerformers(false)
-        }
-      }
-    }
-
-    void loadPerformers()
-
-    return () => {
-      isMounted = false
-    }
-  }, [activeTeam])
 
   const handleDateModeChange = (nextMode: DateFilterMode) => {
     setDateMode(nextMode)
@@ -170,20 +142,14 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                 return (
                   <div className="form-group" key={field.key}>
                     <label htmlFor="filterPerformer">{field.label}</label>
-                    <select
+                    <input
                       id="filterPerformer"
+                      type="text"
                       value={fieldValues.performer || ''}
                       onChange={(event) => setFieldValue('performer', event.target.value)}
-                      disabled={isLoading || isLoadingPerformers}
-                    >
-                      <option value="">All Performers</option>
-                      {performers.map((user) => (
-                        <option key={user.id} value={user.name}>
-                          {user.name}
-                        </option>
-                      ))}
-                      <option value="Other">Other</option>
-                    </select>
+                      placeholder="Search performer..."
+                      disabled={isLoading}
+                    />
                   </div>
                 )
               }

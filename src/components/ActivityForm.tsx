@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
-import { type Activity, type Settings, type Team, getEditors } from '../supabaseClient'
+import { type Activity, type Settings, type Team } from '../supabaseClient'
 import {
   type ActivityFieldDefinition,
   type ConfigurableActivityFieldKey,
@@ -52,11 +52,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
   settings,
 }) => {
   const [formData, setFormData] = useState<Activity>(getInitialFormData())
-  const [usersList, setUsersList] = useState<Array<{ id: string; name: string; email: string }>>([])
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
-  const [performerIsOther, setPerformerIsOther] = useState(false)
   const [isMocActivity, setIsMocActivity] = useState(false)
-  const [otherPerformerName, setOtherPerformerName] = useState('')
   const systemFieldOptions = getSystemFieldOptions(activeTeam)
   const visibleFields = getEnabledActivityFields(settings)
   const commentsFieldVisible = visibleFields.some((field) => field.key === 'comments')
@@ -69,9 +65,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
         activityType: initialData.activityType ?? '',
         comments: parsedComment.commentBody,
       })
-      setPerformerIsOther(initialData.performer === 'Other')
       setIsMocActivity(parsedComment.hasMoc)
-      setOtherPerformerName(parsedComment.otherPerformerName)
       return
     }
 
@@ -80,40 +74,9 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
       nextFormData.performer = currentUserName
     }
 
-    setPerformerIsOther(nextFormData.performer === 'Other')
     setIsMocActivity(false)
-    setOtherPerformerName('')
     setFormData(nextFormData)
   }, [currentUserName, initialData, performerMode])
-
-  useEffect(() => {
-    if (performerMode !== 'manual') {
-      setPerformerIsOther(false)
-      return
-    }
-
-    setPerformerIsOther(formData.performer === 'Other')
-  }, [formData.performer, performerMode])
-
-  useEffect(() => {
-    if (performerMode !== 'manual') {
-      return
-    }
-
-    const loadUsers = async () => {
-      try {
-        setIsLoadingUsers(true)
-        const users = await getEditors(activeTeam)
-        setUsersList(users || [])
-      } catch (error) {
-        console.error('Failed to load editors:', error)
-      } finally {
-        setIsLoadingUsers(false)
-      }
-    }
-
-    void loadUsers()
-  }, [activeTeam, performerMode])
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target
@@ -132,9 +95,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
         activityType: initialData.activityType ?? '',
         comments: parsedComment.commentBody,
       })
-      setPerformerIsOther(initialData.performer === 'Other')
       setIsMocActivity(parsedComment.hasMoc)
-      setOtherPerformerName(parsedComment.otherPerformerName)
       return
     }
 
@@ -143,9 +104,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
       nextFormData.performer = currentUserName
     }
 
-    setPerformerIsOther(false)
     setIsMocActivity(false)
-    setOtherPerformerName('')
     setFormData(nextFormData)
   }
 
@@ -154,7 +113,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     const prefixedComments = buildCommentWithPrefixes({
       comment: formData.comments,
       hasMoc: commentsFieldVisible ? isMocActivity : false,
-      otherPerformerName: performerIsOther ? otherPerformerName : '',
+      otherPerformerName: '',
     })
 
     await onSubmit({
@@ -167,13 +126,6 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     }
   }
 
-  const showLegacyPerformerOption =
-    performerMode === 'manual' &&
-    !isLoadingUsers &&
-    Boolean(formData.performer) &&
-    formData.performer !== 'Other' &&
-    !usersList.some((user) => user.name === formData.performer)
-
   const renderField = (field: ActivityFieldDefinition) => {
     const required = isActivityFieldRequired(settings, field.key)
 
@@ -184,59 +136,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
             Performer
             {required ? ' *' : ''}
           </label>
-          {performerMode === 'manual' ? (
-            <>
-              <select
-                id="performer"
-                name="performer"
-                value={formData.performer}
-                onChange={(event) => {
-                  if (event.target.value === 'Other') {
-                    setPerformerIsOther(true)
-                    setFormData((previous) => ({
-                      ...previous,
-                      performer: 'Other',
-                    }))
-                    return
-                  }
-
-                  setPerformerIsOther(false)
-                  setFormData((previous) => ({
-                    ...previous,
-                    performer: event.target.value,
-                  }))
-                }}
-                required={required}
-                disabled={isLoadingUsers}
-              >
-                <option value="">-- Select Performer --</option>
-                {showLegacyPerformerOption && <option value={formData.performer}>{formData.performer}</option>}
-                {usersList.map((user) => (
-                  <option key={user.id} value={user.name}>
-                    {user.name}
-                  </option>
-                ))}
-                <option value="Other">Other</option>
-              </select>
-              {performerIsOther && (
-                <div className="activity-other-performer-inline">
-                  <label htmlFor="otherPerformerName">Other Performer Name *</label>
-                  <input
-                    type="text"
-                    id="otherPerformerName"
-                    name="otherPerformerName"
-                    value={otherPerformerName}
-                    onChange={(event) => setOtherPerformerName(event.target.value)}
-                    placeholder="Enter performer name"
-                    required
-                  />
-                  <small className="form-hint">
-                    Added to comments as <code>[Performer Name]</code>.
-                  </small>
-                </div>
-              )}
-            </>
-          ) : (
+          {performerMode === 'auto' ? (
             <>
               <input
                 type="text"
@@ -250,6 +150,16 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
               />
               <small className="form-hint">Auto-filled from your signed-in account.</small>
             </>
+          ) : (
+            <input
+              type="text"
+              id="performer"
+              name="performer"
+              value={formData.performer}
+              onChange={handleChange}
+              placeholder="Enter performer name"
+              required={required}
+            />
           )}
         </div>
       )
