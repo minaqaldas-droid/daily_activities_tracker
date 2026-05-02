@@ -182,6 +182,8 @@ function matchesResultsPopupFilter(activity: Activity, filter?: ResultsPopupFilt
       return filter.performers.includes(activity.performer || '')
     case 'hasField':
       return Boolean((activity[filter.field] || '').trim())
+    case 'recentlyEdited':
+      return Boolean(String(activity.editedBy || '').trim())
     case 'sinceDate':
       return (activity.date || '') >= filter.sinceDate
     case 'activityType':

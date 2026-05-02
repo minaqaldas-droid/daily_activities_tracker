@@ -1781,6 +1781,9 @@ export async function getActivitiesForDashboardFilter(filter: DashboardResultsFi
         case 'hasField':
           query = query.not(filter.field, 'is', null).neq(filter.field, '')
           break
+        case 'recentlyEdited':
+          query = query.not('editedBy', 'is', null).neq('editedBy', '')
+          break
         case 'sinceDate':
           query = query.gte('date', filter.sinceDate)
           break
@@ -1801,6 +1804,13 @@ export async function getActivitiesForDashboardFilter(filter: DashboardResultsFi
           break
         default:
           break
+      }
+
+      if (filter.kind === 'recentlyEdited') {
+        return query
+          .order('edited_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(filter.limit)
       }
 
       return query.order('date', { ascending: false }).order('created_at', { ascending: false })

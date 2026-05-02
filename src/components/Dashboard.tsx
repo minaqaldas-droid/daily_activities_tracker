@@ -611,7 +611,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               description: 'Showing the 20 most recently edited activities.',
               activities: recentlyEditedActivities,
               exportFilename: 'Dashboard_Recently_Edited_Activities.xlsx',
-              filter: { kind: 'hasField', field: 'editedBy' },
+              filter: { kind: 'recentlyEdited', limit: 20 },
             })
           }
           onKeyDown={(event) =>
@@ -621,7 +621,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 description: 'Showing the 20 most recently edited activities.',
                 activities: recentlyEditedActivities,
                 exportFilename: 'Dashboard_Recently_Edited_Activities.xlsx',
-                filter: { kind: 'hasField', field: 'editedBy' },
+                filter: { kind: 'recentlyEdited', limit: 20 },
               })
             )
           }
