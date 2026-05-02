@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Settings, type Team, getSettings } from '../supabaseClient'
 import { DEFAULT_ACTIVITY_FIELD_CONFIG } from '../utils/activityFields'
 import { DEFAULT_DASHBOARD_CHART_CONFIG } from '../utils/dashboardCharts'
@@ -20,6 +20,10 @@ const DEFAULT_SETTINGS: Settings = {
 const DEFAULT_FAVICON_PATH = '/favicon.svg'
 const FAVICON_LINK_ID = 'app-favicon'
 const DEFAULT_PRIMARY_COLOR = DEFAULT_SETTINGS.primary_color || '#667eea'
+
+function getTeamCacheKey(team?: Team | null) {
+  return team?.id || '__no-team__'
+}
 
 type RgbColor = {
   r: number
@@ -159,15 +163,33 @@ function getThemeTokens(primaryColor: string) {
 
 export function useSettings(isEnabled: boolean, preferredPrimaryColor = '', activeTeam?: Team | null) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
+  const settingsCacheRef = useRef<Map<string, Settings>>(new Map())
+  const requestIdRef = useRef(0)
 
   const loadSettings = useCallback(async () => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
+
+    const teamKey = getTeamCacheKey(activeTeam)
+    const cachedSettings = settingsCacheRef.current.get(teamKey)
+
+    if (cachedSettings) {
+      setSettings(cachedSettings)
+    }
+
     const appSettings = await getSettings(activeTeam)
-    setSettings(appSettings)
+    settingsCacheRef.current.set(teamKey, appSettings)
+
+    if (requestId === requestIdRef.current) {
+      setSettings(appSettings)
+    }
+
     return appSettings
   }, [activeTeam])
 
   useEffect(() => {
     if (!isEnabled) {
+      requestIdRef.current += 1
       setSettings(DEFAULT_SETTINGS)
       return
     }

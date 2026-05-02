@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import React, { Suspense, lazy, startTransition, useEffect, useMemo, useState } from 'react'
 import { AccountSettings } from './components/AccountSettings'
 import { ActivityForm } from './components/ActivityForm'
 import { ActivityList } from './components/ActivityList'
@@ -6,7 +6,6 @@ import { ActivityResultsPopup } from './components/ActivityResultsPopup'
 import {
   Dashboard,
   type DashboardActivityRequest,
-  type DashboardResultsFilter,
 } from './components/Dashboard'
 import { Login } from './components/Login'
 import { SearchFilter } from './components/SearchFilter'
@@ -16,9 +15,19 @@ import { UserManagementModal } from './components/UserManagementModal'
 import { getActivityTypeLabel } from './constants/activityTypes'
 import { useActivities } from './hooks/useActivities'
 import { useAuth } from './hooks/useAuth'
+import { useDashboardActivities } from './hooks/useDashboardActivities'
 import { useSettings } from './hooks/useSettings'
-import { hasPermission, type Activity, type SearchFilters, type Settings, type Team, type User } from './supabaseClient'
+import {
+  getActivitiesForDashboardFilter,
+  hasPermission,
+  type Activity,
+  type SearchFilters,
+  type Settings,
+  type Team,
+  type User,
+} from './supabaseClient'
 import { formatDateForDisplay } from './utils/date'
+import { type DashboardResultsFilter } from './types/activityResults'
 
 const ExcelImport = lazy(() =>
   import('./components/ExcelImport').then((module) => ({ default: module.ExcelImport }))
@@ -220,9 +229,11 @@ function App() {
   )
   const {
     activities,
+    latestActivities,
     filteredActivities,
     isLoading,
     loadActivities,
+    loadRecentActivities,
     removeActivity,
     resetActivities,
     runSearch,
@@ -233,6 +244,14 @@ function App() {
     performerMode: settings.performer_mode || 'manual',
     activeTeam: effectiveActiveTeam,
   })
+  const {
+    summaryActivities,
+    recentActivities,
+    isLoading: isDashboardLoading,
+    loadDashboardActivities,
+    invalidateDashboardActivities,
+    resetDashboardActivities,
+  } = useDashboardActivities(effectiveActiveTeam)
 
   const [message, setMessage] = useState<AppMessage>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -258,6 +277,7 @@ function App() {
     if (!currentUser) {
       setActiveTeam(null)
       resetActivities()
+      resetDashboardActivities()
       setEditingId(null)
       setEditingData(undefined)
       setCurrentView('dashboard')
@@ -277,7 +297,7 @@ function App() {
 
       return currentUser.active_team || availableTeams[0] || null
     })
-  }, [currentUser])
+  }, [currentUser, resetActivities, resetDashboardActivities])
 
   useEffect(() => {
     if (!currentUser || typeof window === 'undefined' || typeof document === 'undefined') {
@@ -296,7 +316,7 @@ function App() {
 
     let isMounted = true
 
-    void loadActivities().catch((error) => {
+    void loadDashboardActivities().catch((error) => {
       if (!isMounted) {
         return
       }
@@ -319,7 +339,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [appUser, loadActivities])
+  }, [appUser, loadDashboardActivities])
 
   useEffect(() => {
     if (!message) {
@@ -329,6 +349,32 @@ function App() {
     const timer = window.setTimeout(() => setMessage(null), 3000)
     return () => window.clearTimeout(timer)
   }, [message])
+
+  useEffect(() => {
+    if (!appUser || currentView !== 'export') {
+      return
+    }
+
+    void loadActivities().catch((error) => {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to prepare activities for export.',
+      })
+    })
+  }, [appUser, currentView, loadActivities])
+
+  useEffect(() => {
+    if (!appUser || currentView !== 'search') {
+      return
+    }
+
+    void runSearch(searchApplied ? lastSearchFilters : {}).catch((error) => {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to refresh search activities.',
+      })
+    })
+  }, [appUser, currentView, lastSearchFilters, runSearch, searchApplied])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -513,6 +559,11 @@ function App() {
       await saveActivity(activity, {
         editingId,
         editingData,
+        refreshMode: currentView === 'export' ? 'full' : 'recent',
+      })
+      invalidateDashboardActivities()
+      void loadDashboardActivities().catch((error) => {
+        console.error('Error refreshing dashboard activities after save:', error)
       })
 
       setMessage({
@@ -587,7 +638,11 @@ function App() {
     }
 
     try {
-      await removeActivity(id)
+      await removeActivity(id, currentView === 'export' ? 'full' : 'recent')
+      invalidateDashboardActivities()
+      void loadDashboardActivities().catch((error) => {
+        console.error('Error refreshing dashboard activities after delete:', error)
+      })
       setResultsPopup((prev) =>
         prev
           ? {
@@ -650,14 +705,26 @@ function App() {
     setMessage({ type: 'success', text: 'Settings updated successfully.' })
   }
 
-  const handleOpenDashboardResults = (request: DashboardActivityRequest) => {
-    setResultsPopup({
-      title: request.title,
-      description: request.description,
-      activities: request.activities,
-      exportFilename: request.exportFilename || `${request.title.replace(/\s+/g, '_')}.xlsx`,
-      filter: request.filter,
-    })
+  const handleOpenDashboardResults = async (request: DashboardActivityRequest) => {
+    try {
+      const popupActivities =
+        request.filter
+          ? await getActivitiesForDashboardFilter(request.filter, effectiveActiveTeam)
+          : request.activities || []
+
+      setResultsPopup({
+        title: request.title,
+        description: request.description,
+        activities: popupActivities,
+        exportFilename: request.exportFilename || `${request.title.replace(/\s+/g, '_')}.xlsx`,
+        filter: request.filter,
+      })
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to load dashboard activities.',
+      })
+    }
   }
 
   const handleSidebarToggle = () => {
@@ -697,16 +764,6 @@ function App() {
 
     if (view === 'search') {
       setCurrentView(view)
-      void runSearch({})
-        .then(() => {
-          setResultsPopup(null)
-        })
-        .catch((error) => {
-          setMessage({
-            type: 'error',
-            text: error instanceof Error ? error.message : 'Failed to prepare latest activities.',
-          })
-        })
       return
     }
 
@@ -732,7 +789,7 @@ function App() {
     return null
   }
 
-  const latestSearchActivities = activities.slice(0, 10)
+  const latestSearchActivities = latestActivities
   const searchResultsPopupState = buildSearchResultsPopup(filteredActivities, lastSearchFilters)
   const currentViewLabel = APP_VIEW_LABELS[currentView]
 
@@ -745,7 +802,9 @@ function App() {
         onTeamChange={(teamId) => {
           const nextTeam = currentUser.team_memberships?.find((membership) => membership.team.id === teamId)?.team
           if (nextTeam) {
-            setActiveTeam(nextTeam)
+            startTransition(() => {
+              setActiveTeam(nextTeam)
+            })
             setResultsPopup(null)
             setEditingId(null)
             setEditingData(undefined)
@@ -833,13 +892,14 @@ function App() {
             {currentView === 'dashboard' && (
               <div className="dashboard-section-main">
                 <Dashboard
-                  activities={activities}
+                  activities={summaryActivities}
+                  recentActivities={recentActivities}
                   performerName={appUser.name}
                   activeTeam={effectiveActiveTeam}
                   settings={settings}
                   onEdit={handleEditActivity}
                   onDelete={handleDeleteActivity}
-                  isLoading={isLoading}
+                  isLoading={isLoading || isDashboardLoading}
                   canEdit={canEditAction}
                   canDelete={canDeleteAction}
                   onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
@@ -947,7 +1007,8 @@ function App() {
                           ? `Imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}. ${skippedCount} row${skippedCount === 1 ? ' was' : 's were'} skipped and should be reviewed.`
                           : `Successfully imported ${importedCount} activit${importedCount === 1 ? 'y' : 'ies'}.`,
                     })
-                    void loadActivities().catch((error) => {
+                    invalidateDashboardActivities()
+                    void Promise.all([loadRecentActivities(), loadDashboardActivities()]).catch((error) => {
                       console.error('Error refreshing activities after import:', error)
                     })
                   }}

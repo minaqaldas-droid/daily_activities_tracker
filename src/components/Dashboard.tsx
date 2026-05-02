@@ -1,32 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { type Activity, type Settings, type Team } from '../supabaseClient'
+import { type DashboardResultsFilter } from '../types/activityResults'
 import { type DashboardChartKey, getEnabledDashboardCharts } from '../utils/dashboardCharts'
 import { getSystemFieldLabel } from '../utils/teamActivityField'
 import { ActivityList } from './ActivityList'
 
-export type DashboardResultsFilter =
-  | { kind: 'all' }
-  | { kind: 'performer'; performer: string }
-  | { kind: 'performerIn'; performers: string[] }
-  | { kind: 'hasField'; field: 'performer' | 'system' | 'tag' | 'editedBy' }
-  | { kind: 'sinceDate'; sinceDate: string }
-  | { kind: 'activityType'; activityType: string }
-  | { kind: 'system'; system: string }
-  | { kind: 'shift'; shift: string }
-  | { kind: 'instrumentType'; instrumentType: string }
-  | { kind: 'tag'; tag: string }
-
 export interface DashboardActivityRequest {
   title: string
   description: string
-  activities: Activity[]
+  activities?: Activity[]
   exportFilename?: string
   filter?: DashboardResultsFilter
 }
 
 interface DashboardProps {
   activities: Activity[]
+  recentActivities?: Activity[]
   performerName: string
   onEdit?: (activity: Activity) => void
   onDelete?: (id: string) => Promise<void>
@@ -279,6 +269,7 @@ function BarChartCard({
 
 export const Dashboard: React.FC<DashboardProps> = ({
   activities,
+  recentActivities = [],
   performerName,
   onEdit,
   onDelete,
@@ -524,7 +515,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
             openActivityResults({
               title: '📈 Total Activities',
               description: `Showing all ${activities.length} recorded activities.`,
-              activities,
               exportFilename: 'Dashboard_Total_Activities.xlsx',
               filter: { kind: 'all' },
             })
@@ -534,7 +524,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
               openActivityResults({
                 title: '📈 Total Activities',
                 description: `Showing all ${activities.length} recorded activities.`,
-                activities,
                 exportFilename: 'Dashboard_Total_Activities.xlsx',
                 filter: { kind: 'all' },
               })
@@ -662,7 +651,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span>Recent Activities</span>
           </h3>
           <ActivityList
-            activities={stats.recentActivities}
+            activities={recentActivities}
             onEdit={onEdit}
             onDelete={onDelete}
             activeTeam={activeTeam}

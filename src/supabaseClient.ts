@@ -7,6 +7,7 @@ import {
   type UserAttributes,
 } from '@supabase/supabase-js'
 import { type ActivityTypeValue, getActivityTypeLabel } from './constants/activityTypes'
+import { type DashboardResultsFilter } from './types/activityResults'
 import { formatDateForDisplay, normalizeDateForApp } from './utils/date'
 import { type ActivityFieldConfig } from './utils/activityFields'
 import { type DashboardChartConfig } from './utils/dashboardCharts'
@@ -780,6 +781,10 @@ function matchesSearchFilters(filters: SearchFilters) {
 }
 
 const ACTIVITY_FETCH_BATCH_SIZE = 1000
+const FULL_ACTIVITY_SELECT_COLUMNS =
+  'id,date,performer,system,shift,permit_number,instrument_type,activityType,tag,problem,action,comments,editedBy,created_at,edited_at'
+const DASHBOARD_ACTIVITY_SELECT_COLUMNS =
+  'date,performer,system,shift,instrument_type,activityType,tag,editedBy,created_at,edited_at'
 
 async function fetchAllActivitiesBatched(buildQuery: () => any) {
   let offset = 0
@@ -865,7 +870,7 @@ export async function getActivities(team?: Team | null) {
     const data = await fetchAllActivitiesBatched(() =>
       supabase
         .from('team_activities')
-        .select('*')
+        .select(FULL_ACTIVITY_SELECT_COLUMNS)
         .eq('team_id', activeTeam.id)
         .order('date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -874,6 +879,47 @@ export async function getActivities(team?: Team | null) {
     return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
   } catch (error) {
     console.error('Error fetching activities:', error)
+    throw error
+  }
+}
+
+export async function getRecentActivities(limit = 10, team?: Team | null) {
+  try {
+    const activeTeam = requireActiveTeam(team)
+    const { data, error } = await supabase
+      .from('team_activities')
+      .select(FULL_ACTIVITY_SELECT_COLUMNS)
+      .eq('team_id', activeTeam.id)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      throw error
+    }
+
+    return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+  } catch (error) {
+    console.error('Error fetching recent activities:', error)
+    throw error
+  }
+}
+
+export async function getDashboardActivities(team?: Team | null) {
+  try {
+    const activeTeam = requireActiveTeam(team)
+    const data = await fetchAllActivitiesBatched(() =>
+      supabase
+        .from('team_activities')
+        .select(DASHBOARD_ACTIVITY_SELECT_COLUMNS)
+        .eq('team_id', activeTeam.id)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+    )
+
+    return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+  } catch (error) {
+    console.error('Error fetching dashboard activities:', error)
     throw error
   }
 }
@@ -1613,7 +1659,7 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
     }
 
     const activeTeam = requireActiveTeam(team)
-    let query = supabase.from('team_activities').select('*').eq('team_id', activeTeam.id)
+    let query = supabase.from('team_activities').select(FULL_ACTIVITY_SELECT_COLUMNS).eq('team_id', activeTeam.id)
     const hasDateFilters = Boolean(filters.date || filters.startDate || filters.endDate)
 
     if (hasDateFilters) {
@@ -1711,6 +1757,59 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
     return results
   } catch (error) {
     console.error('Error searching activities:', error)
+    throw error
+  }
+}
+
+export async function getActivitiesForDashboardFilter(filter: DashboardResultsFilter, team?: Team | null) {
+  try {
+    if (filter.kind === 'all') {
+      return getActivities(team)
+    }
+
+    const activeTeam = requireActiveTeam(team)
+    const buildQuery = () => {
+      let query = supabase.from('team_activities').select(FULL_ACTIVITY_SELECT_COLUMNS).eq('team_id', activeTeam.id)
+
+      switch (filter.kind) {
+        case 'performer':
+          query = query.eq('performer', filter.performer)
+          break
+        case 'performerIn':
+          query = query.in('performer', filter.performers)
+          break
+        case 'hasField':
+          query = query.not(filter.field, 'is', null).neq(filter.field, '')
+          break
+        case 'sinceDate':
+          query = query.gte('date', filter.sinceDate)
+          break
+        case 'activityType':
+          query = query.eq('activityType', filter.activityType)
+          break
+        case 'system':
+          query = query.eq('system', filter.system)
+          break
+        case 'shift':
+          query = query.eq('shift', filter.shift)
+          break
+        case 'instrumentType':
+          query = query.eq('instrument_type', filter.instrumentType)
+          break
+        case 'tag':
+          query = query.eq('tag', filter.tag)
+          break
+        default:
+          break
+      }
+
+      return query.order('date', { ascending: false }).order('created_at', { ascending: false })
+    }
+
+    const data = await fetchAllActivitiesBatched(buildQuery)
+    return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+  } catch (error) {
+    console.error('Error fetching dashboard filter activities:', error)
     throw error
   }
 }
