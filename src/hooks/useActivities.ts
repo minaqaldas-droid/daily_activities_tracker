@@ -12,7 +12,13 @@ import {
 } from '../supabaseClient'
 
 function hasSearchFilters(filters: SearchFilters) {
-  return Object.values(filters).some((value) => Boolean(value))
+  return Object.entries(filters).some(([key, value]) => {
+    if (key === 'customFields') {
+      return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, string>).length > 0)
+    }
+
+    return Boolean(value)
+  })
 }
 
 function getTeamCacheKey(team?: Team | null) {
@@ -54,15 +60,21 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
   const [activeFilters, setActiveFilters] = useState<SearchFilters>({})
   const activitiesCacheRef = useRef<Map<string, TeamActivitiesCacheEntry>>(new Map())
   const requestIdRef = useRef(0)
+  const activeFiltersRef = useRef<SearchFilters>({})
+
+  useEffect(() => {
+    activeFiltersRef.current = activeFilters
+  }, [activeFilters])
 
   const loadActivities = useCallback(async () => {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
 
     const teamKey = getTeamCacheKey(activeTeam)
-    const searchKey = getSearchCacheKey(activeFilters)
+    const currentFilters = activeFiltersRef.current
+    const searchKey = getSearchCacheKey(currentFilters)
     const cachedEntry = activitiesCacheRef.current.get(teamKey)
-    const shouldApplySearch = hasSearchFilters(activeFilters)
+    const shouldApplySearch = hasSearchFilters(currentFilters)
 
     if (cachedEntry?.activities) {
       setActivities(cachedEntry.activities)
@@ -95,7 +107,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
       }
 
       if (shouldApplySearch) {
-        const results = await searchActivities(activeFilters, activeTeam)
+        const results = await searchActivities(currentFilters, activeTeam)
         nextCacheEntry.searchResultsByKey[searchKey] = results
         activitiesCacheRef.current.set(teamKey, nextCacheEntry)
 
@@ -114,7 +126,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
         setIsLoading(false)
       }
     }
-  }, [activeFilters, activeTeam])
+  }, [activeTeam])
 
   const loadRecentActivities = useCallback(async (limit = 10) => {
     const requestId = requestIdRef.current + 1
@@ -127,7 +139,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
 
     if (cachedRecentActivities) {
       setLatestActivities(cachedRecentActivities)
-      if (!hasSearchFilters(activeFilters)) {
+      if (!hasSearchFilters(activeFiltersRef.current)) {
         setFilteredActivities(cachedRecentActivities)
         setSearchApplied(false)
       }
@@ -149,7 +161,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
 
       if (requestId === requestIdRef.current) {
         setLatestActivities(recentActivities)
-        if (!hasSearchFilters(activeFilters)) {
+        if (!hasSearchFilters(activeFiltersRef.current)) {
           setFilteredActivities(recentActivities)
           setSearchApplied(false)
         }
@@ -161,7 +173,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
         setIsLoading(false)
       }
     }
-  }, [activeFilters, activeTeam])
+  }, [activeTeam])
 
   useEffect(() => {
     if (!hasSearchFilters(activeFilters)) {
@@ -187,6 +199,7 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
             problem: activity.problem,
             action: activity.action,
             comments: activity.comments,
+            customFields: activity.customFields,
             editedBy: currentUserName || undefined,
             edited_at: new Date().toISOString(),
           }
@@ -240,10 +253,33 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
     setIsLoading(true)
 
     try {
+      activeFiltersRef.current = filters
       setActiveFilters(filters)
 
       if (!hasSearchFilters(filters)) {
-        const recentActivities = await loadRecentActivities(10)
+        const teamKey = getTeamCacheKey(activeTeam)
+        const cachedEntry = activitiesCacheRef.current.get(teamKey)
+        const recentCacheKey = '10'
+        const cachedRecentActivities = cachedEntry?.recentByLimit[recentCacheKey]
+
+        if (cachedRecentActivities) {
+          setLatestActivities(cachedRecentActivities)
+          setFilteredActivities(cachedRecentActivities)
+          setSearchApplied(false)
+          return cachedRecentActivities
+        }
+
+        const recentActivities = await getRecentActivities(10, activeTeam)
+        const nextCacheEntry: TeamActivitiesCacheEntry = {
+          activities: cachedEntry?.activities,
+          recentByLimit: {
+            ...(cachedEntry?.recentByLimit || {}),
+            [recentCacheKey]: recentActivities,
+          },
+          searchResultsByKey: cachedEntry?.searchResultsByKey || {},
+        }
+        activitiesCacheRef.current.set(teamKey, nextCacheEntry)
+        setLatestActivities(recentActivities)
         setFilteredActivities(recentActivities)
         setSearchApplied(false)
         return recentActivities
@@ -276,13 +312,14 @@ export function useActivities({ currentUserName = '', performerMode = 'manual', 
     } finally {
       setIsLoading(false)
     }
-  }, [activeTeam, loadRecentActivities])
+  }, [activeTeam])
 
   const resetActivities = useCallback(() => {
     setActivities([])
     setLatestActivities([])
     setFilteredActivities([])
     setActiveFilters({})
+    activeFiltersRef.current = {}
     setSearchApplied(false)
     requestIdRef.current += 1
   }, [])

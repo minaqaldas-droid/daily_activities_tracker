@@ -5,7 +5,7 @@ import {
   getActivityTypeShortLabel,
 } from '../constants/activityTypes'
 import { type Activity, type Settings, type Team } from '../supabaseClient'
-import { type ConfigurableActivityFieldKey, getEnabledActivityFields, getActivityFieldValue } from '../utils/activityFields'
+import { type ActivityFieldDefinition, getActivityFieldLabel, getActivityFieldValue, getEnabledActivityFields } from '../utils/activityFields'
 import { formatDateForDisplay } from '../utils/date'
 
 interface ActivityListProps {
@@ -22,101 +22,15 @@ interface ActivityListProps {
   emptyMessage?: string
 }
 
-type ColumnId = ConfigurableActivityFieldKey | 'actions'
-
-const ALL_COLUMNS: ColumnId[] = [
-  'date',
-  'performer',
-  'system',
-  'shift',
-  'permitNumber',
-  'instrumentType',
-  'activityType',
-  'tag',
-  'problem',
-  'action',
-  'comments',
-  'actions',
-]
-
-const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
-  date: 10,
-  performer: 10,
-  system: 9,
-  shift: 8,
-  permitNumber: 10,
-  instrumentType: 10,
-  activityType: 8,
-  tag: 10,
-  problem: 14,
-  action: 18,
-  comments: 14,
-  actions: 8,
-}
-
-const MIN_COLUMN_WIDTHS: Record<ColumnId, number> = {
-  date: 7,
-  performer: 8,
-  system: 7,
-  shift: 7,
-  permitNumber: 8,
-  instrumentType: 8,
-  activityType: 7,
-  tag: 8,
-  problem: 10,
-  action: 12,
-  comments: 10,
-  actions: 7,
-}
-
-const MAX_COLUMN_WIDTHS: Record<ColumnId, number> = {
-  date: 24,
-  performer: 24,
-  system: 22,
-  shift: 18,
-  permitNumber: 24,
-  instrumentType: 24,
-  activityType: 18,
-  tag: 22,
-  problem: 30,
-  action: 36,
-  comments: 30,
-  actions: 18,
-}
-
+const DEFAULT_COLUMN_WIDTH = 12
+const MIN_COLUMN_WIDTH = 7
+const MAX_COLUMN_WIDTH = 36
 const COLUMN_WIDTHS_STORAGE_KEY = 'activity-table-column-widths'
 
-function getColumnLabel(columnId: ConfigurableActivityFieldKey) {
-  switch (columnId) {
-    case 'activityType':
-      return 'Activity Type'
-    case 'permitNumber':
-      return 'Permit Number'
-    case 'instrumentType':
-      return 'Instrument Type'
-    case 'action':
-      return 'Action'
-    case 'comments':
-      return 'Comments'
-    case 'performer':
-      return 'Performer'
-    case 'problem':
-      return 'Problem'
-    case 'tag':
-      return 'Tag'
-    case 'date':
-      return 'Date'
-    case 'shift':
-      return 'Shift'
-    case 'system':
-      return 'System'
-    default:
-      return columnId
-  }
-}
+function renderCellContent(activity: Activity, field: ActivityFieldDefinition) {
+  const value = getActivityFieldValue(activity, field.key)
 
-function renderCellContent(activity: Activity, columnId: ConfigurableActivityFieldKey) {
-  switch (columnId) {
+  switch (field.key) {
     case 'date':
       return <span className="date-badge">{formatDateForDisplay(activity.date)}</span>
     case 'activityType':
@@ -133,13 +47,13 @@ function renderCellContent(activity: Activity, columnId: ConfigurableActivityFie
     case 'permitNumber':
     case 'instrumentType':
     case 'tag':
-      return <span className={columnId === 'tag' ? 'tag-badge' : 'system-badge'}>{getActivityFieldValue(activity, columnId) || '-'}</span>
+      return <span className={field.key === 'tag' ? 'tag-badge' : 'system-badge'}>{value || '-'}</span>
     case 'problem':
     case 'action':
     case 'comments':
-      return <div className="truncate">{getActivityFieldValue(activity, columnId) || '-'}</div>
+      return field.tableBadge ? <span className="system-badge">{value || '-'}</span> : <div className="truncate">{value || '-'}</div>
     default:
-      return getActivityFieldValue(activity, columnId) || '-'
+      return field.tableBadge ? <span className="system-badge">{value || '-'}</span> : value || '-'
   }
 }
 
@@ -155,11 +69,16 @@ export const ActivityList: React.FC<ActivityListProps> = ({
   onDeleteDenied,
   emptyMessage = 'No activities recorded yet. Start by adding your first activity!',
 }) => {
-  const [columnWidths, setColumnWidths] = useState<Record<ColumnId, number>>(DEFAULT_COLUMN_WIDTHS)
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
   const [isResizing, setIsResizing] = useState(false)
   const tableContainerRef = useRef<HTMLDivElement | null>(null)
-  const visibleFieldColumns = getEnabledActivityFields(settings).map((field) => field.key)
-  const visibleColumns = useMemo<ColumnId[]>(() => [...visibleFieldColumns, 'actions'], [visibleFieldColumns])
+  const visibleFieldDefinitions = getEnabledActivityFields(settings).filter((field) => field.type !== 'checkbox')
+  const visibleFieldColumns = visibleFieldDefinitions.map((field) => field.key)
+  const visibleFieldsByKey = useMemo(
+    () => new Map(visibleFieldDefinitions.map((field) => [field.key, field])),
+    [visibleFieldDefinitions]
+  )
+  const visibleColumns = useMemo(() => [...visibleFieldColumns, 'actions'], [visibleFieldColumns])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -172,14 +91,8 @@ export const ActivityList: React.FC<ActivityListProps> = ({
         return
       }
 
-      const parsed = JSON.parse(raw) as Partial<Record<ColumnId, number>>
-      const merged = ALL_COLUMNS.reduce<Record<ColumnId, number>>((acc, key) => {
-        const candidate = Number(parsed[key])
-        acc[key] = Number.isFinite(candidate) ? candidate : DEFAULT_COLUMN_WIDTHS[key]
-        return acc
-      }, { ...DEFAULT_COLUMN_WIDTHS })
-
-      setColumnWidths(merged)
+      const parsed = JSON.parse(raw) as Record<string, number>
+      setColumnWidths(parsed)
     } catch (error) {
       console.warn('Failed to restore saved table column widths:', error)
     }
@@ -194,18 +107,17 @@ export const ActivityList: React.FC<ActivityListProps> = ({
   }, [columnWidths])
 
   const normalizedColumnWidths = useMemo(() => {
-    const total = visibleColumns.reduce((sum, key) => sum + columnWidths[key], 0)
+    const total = visibleColumns.reduce((sum, key) => sum + (columnWidths[key] || DEFAULT_COLUMN_WIDTH), 0)
     if (total <= 0) {
-      return DEFAULT_COLUMN_WIDTHS
+      return Object.fromEntries(visibleColumns.map((key) => [key, DEFAULT_COLUMN_WIDTH]))
     }
 
-    return visibleColumns.reduce<Record<ColumnId, number>>((acc, key) => {
-      acc[key] = (columnWidths[key] / total) * 100
-      return acc
-    }, { ...DEFAULT_COLUMN_WIDTHS })
+    return Object.fromEntries(
+      visibleColumns.map((key) => [key, (((columnWidths[key] || DEFAULT_COLUMN_WIDTH) / total) * 100)])
+    )
   }, [columnWidths, visibleColumns])
 
-  const handleColumnResizeStart = (columnId: ColumnId, event: React.MouseEvent<HTMLSpanElement>) => {
+  const handleColumnResizeStart = (columnId: string, event: React.MouseEvent<HTMLSpanElement>) => {
     event.preventDefault()
     event.stopPropagation()
 
@@ -215,7 +127,7 @@ export const ActivityList: React.FC<ActivityListProps> = ({
     }
 
     const startX = event.clientX
-    const startWidths = { ...columnWidths }
+    const startWidths = Object.fromEntries(visibleColumns.map((key) => [key, columnWidths[key] || DEFAULT_COLUMN_WIDTH]))
     const currentIndex = visibleColumns.indexOf(columnId)
     const adjacentIndex = currentIndex < visibleColumns.length - 1 ? currentIndex + 1 : currentIndex - 1
     if (adjacentIndex < 0) {
@@ -230,14 +142,11 @@ export const ActivityList: React.FC<ActivityListProps> = ({
       const deltaPercent = (deltaPx / containerWidth) * 100
 
       let nextCurrent = startWidths[columnId] + deltaPercent
-      nextCurrent = Math.max(MIN_COLUMN_WIDTHS[columnId], Math.min(MAX_COLUMN_WIDTHS[columnId], nextCurrent))
+      nextCurrent = Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, nextCurrent))
 
       const appliedDelta = nextCurrent - startWidths[columnId]
       let nextAdjacent = startWidths[adjacentColumn] - appliedDelta
-      nextAdjacent = Math.max(
-        MIN_COLUMN_WIDTHS[adjacentColumn],
-        Math.min(MAX_COLUMN_WIDTHS[adjacentColumn], nextAdjacent)
-      )
+      nextAdjacent = Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, nextAdjacent))
 
       const constrainedDelta = startWidths[adjacentColumn] - nextAdjacent
       const finalCurrent = startWidths[columnId] + constrainedDelta
@@ -299,7 +208,7 @@ export const ActivityList: React.FC<ActivityListProps> = ({
           <tr>
             {visibleFieldColumns.map((columnId) => (
               <th key={columnId} className="resizable-th">
-                {getColumnLabel(columnId)}
+                {getActivityFieldLabel(columnId, settings)}
                 <span className="column-resize-handle" onMouseDown={(event) => handleColumnResizeStart(columnId, event)} />
               </th>
             ))}
@@ -310,8 +219,16 @@ export const ActivityList: React.FC<ActivityListProps> = ({
           {activities.map((activity) => (
             <tr key={activity.id} className="activity-row">
               {visibleFieldColumns.map((columnId) => (
-                <td key={columnId} data-label={getColumnLabel(columnId)}>
-                  {renderCellContent(activity, columnId)}
+                <td key={columnId} data-label={getActivityFieldLabel(columnId, settings)}>
+                  {renderCellContent(activity, visibleFieldsByKey.get(columnId) || {
+                    key: columnId,
+                    label: getActivityFieldLabel(columnId, settings),
+                    placeholder: '',
+                    type: 'text',
+                    defaultEnabled: true,
+                    defaultRequired: false,
+                    defaultOrder: 0,
+                  })}
                 </td>
               ))}
               <td className="col-actions" data-label="Edit / Delete">

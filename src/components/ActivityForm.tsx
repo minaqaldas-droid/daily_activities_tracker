@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { type Activity, type Settings, type Team } from '../supabaseClient'
 import {
   type ActivityFieldDefinition,
-  type ConfigurableActivityFieldKey,
+  getActivityFieldValue,
   getEnabledActivityFields,
   isActivityFieldRequired,
+  setActivityFieldValue,
 } from '../utils/activityFields'
 import { buildCommentWithPrefixes, parseCommentPrefixes } from '../utils/comments'
+import { getLayoutConfig } from '../utils/layoutConfig'
 import { getSystemFieldOptions } from '../utils/teamActivityField'
 
 interface ActivityFormProps {
@@ -40,7 +42,38 @@ const getInitialFormData = (): Activity => ({
   problem: '',
   action: '',
   comments: '',
+  customFields: {},
 })
+
+function useResponsiveColumns(baseColumns: { mobile: number; tablet: number; desktop: number }) {
+  const [columns, setColumns] = useState(baseColumns.desktop)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const updateColumns = () => {
+      if (window.innerWidth <= 640) {
+        setColumns(baseColumns.mobile)
+        return
+      }
+
+      if (window.innerWidth <= 1024) {
+        setColumns(baseColumns.tablet)
+        return
+      }
+
+      setColumns(baseColumns.desktop)
+    }
+
+    updateColumns()
+    window.addEventListener('resize', updateColumns)
+    return () => window.removeEventListener('resize', updateColumns)
+  }, [baseColumns.desktop, baseColumns.mobile, baseColumns.tablet])
+
+  return columns
+}
 
 export const ActivityForm: React.FC<ActivityFormProps> = ({
   onSubmit,
@@ -52,20 +85,54 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
   settings,
 }) => {
   const [formData, setFormData] = useState<Activity>(getInitialFormData())
-  const [isMocActivity, setIsMocActivity] = useState(false)
   const systemFieldOptions = getSystemFieldOptions(activeTeam)
-  const visibleFields = getEnabledActivityFields(settings)
-  const commentsFieldVisible = visibleFields.some((field) => field.key === 'comments')
+  const visibleFields = useMemo(() => getEnabledActivityFields(settings), [settings])
+  const checkboxFields = useMemo(() => visibleFields.filter((field) => field.type === 'checkbox'), [visibleFields])
+  const layoutConfig = getLayoutConfig(settings)
+  const mainGridColumns = useResponsiveColumns(layoutConfig.activityFormColumns)
+
+  const applyParsedCommentToActivity = useMemo(
+    () => (activity: Activity) => {
+      const parsedComment = parseCommentPrefixes(activity.comments)
+      const checkboxFieldMap = new Map(checkboxFields.map((field) => [field.label.trim().toLowerCase(), field.key]))
+      const nextCustomFields = { ...(activity.customFields || {}) }
+      nextCustomFields.mocActivity = parsedComment.hasMoc ? 'true' : String(nextCustomFields.mocActivity || '').toLowerCase() === 'true' ? 'true' : ''
+
+      checkboxFields.forEach((field) => {
+        if (field.key === 'mocActivity') {
+          return
+        }
+        const hasMatchingToken = parsedComment.checkboxLabels.some((label) => label.toLowerCase() === field.label.trim().toLowerCase())
+        nextCustomFields[field.key] = hasMatchingToken || String(nextCustomFields[field.key] || '').toLowerCase() === 'true' ? 'true' : ''
+      })
+
+      parsedComment.checkboxLabels.forEach((label) => {
+        const matchingFieldKey = checkboxFieldMap.get(label.toLowerCase())
+        if (matchingFieldKey) {
+          nextCustomFields[matchingFieldKey] = 'true'
+        }
+      })
+
+      return {
+        parsedComment,
+        normalizedActivity: {
+          ...activity,
+          activityType: activity.activityType ?? '',
+          comments: parsedComment.commentBody,
+          customFields: nextCustomFields,
+        },
+      }
+    },
+    [checkboxFields]
+  )
 
   useEffect(() => {
+
     if (initialData) {
-      const parsedComment = parseCommentPrefixes(initialData.comments)
+      const { parsedComment, normalizedActivity } = applyParsedCommentToActivity(initialData)
       setFormData({
-        ...initialData,
-        activityType: initialData.activityType ?? '',
-        comments: parsedComment.commentBody,
+        ...normalizedActivity,
       })
-      setIsMocActivity(parsedComment.hasMoc)
       return
     }
 
@@ -74,28 +141,26 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
       nextFormData.performer = currentUserName
     }
 
-    setIsMocActivity(false)
     setFormData(nextFormData)
-  }, [currentUserName, initialData, performerMode])
+  }, [applyParsedCommentToActivity, currentUserName, initialData, performerMode])
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = event.target
+    const { name } = event.target
+    if (event.target instanceof HTMLInputElement && event.target.type === 'checkbox') {
+      const input = event.target as HTMLInputElement
+      setFormData((previous) => setActivityFieldValue(previous, name, input.checked))
+      return
+    }
 
-    setFormData((previous) => ({
-      ...previous,
-      [name]: value,
-    }))
+    setFormData((previous) => setActivityFieldValue(previous, name, event.target.value))
   }
 
   const handleReset = () => {
     if (initialData) {
-      const parsedComment = parseCommentPrefixes(initialData.comments)
+      const { parsedComment, normalizedActivity } = applyParsedCommentToActivity(initialData)
       setFormData({
-        ...initialData,
-        activityType: initialData.activityType ?? '',
-        comments: parsedComment.commentBody,
+        ...normalizedActivity,
       })
-      setIsMocActivity(parsedComment.hasMoc)
       return
     }
 
@@ -104,16 +169,20 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
       nextFormData.performer = currentUserName
     }
 
-    setIsMocActivity(false)
     setFormData(nextFormData)
   }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    const checkboxLabels = checkboxFields
+      .filter((field) => field.key !== 'mocActivity')
+      .filter((field) => String(getActivityFieldValue(formData, field.key)).toLowerCase() === 'true')
+      .map((field) => field.label)
     const prefixedComments = buildCommentWithPrefixes({
       comment: formData.comments,
-      hasMoc: commentsFieldVisible ? isMocActivity : false,
+      hasMoc: String(getActivityFieldValue(formData, 'mocActivity')).toLowerCase() === 'true',
       otherPerformerName: '',
+      checkboxLabels,
     })
 
     await onSubmit({
@@ -128,12 +197,13 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
   const renderField = (field: ActivityFieldDefinition) => {
     const required = isActivityFieldRequired(settings, field.key)
+    const value = getActivityFieldValue(formData, field.key)
 
     if (field.key === 'performer') {
       return (
         <div className="form-group" key={field.key}>
           <label htmlFor="performer">
-            Performer
+            {field.label}
             {required ? ' *' : ''}
           </label>
           {performerMode === 'auto' ? (
@@ -142,10 +212,10 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
                 type="text"
                 id="performer"
                 name="performer"
-                value={formData.performer}
+                value={value}
                 onChange={handleChange}
                 disabled
-                placeholder="Enter performer name"
+                placeholder={field.placeholder}
                 required={required}
               />
               <small className="form-hint">Auto-filled from your signed-in account.</small>
@@ -155,9 +225,9 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
               type="text"
               id="performer"
               name="performer"
-              value={formData.performer}
+              value={value}
               onChange={handleChange}
-              placeholder="Enter performer name"
+              placeholder={field.placeholder}
               required={required}
             />
           )}
@@ -169,10 +239,10 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
       return (
         <div className="form-group" key={field.key}>
           <label htmlFor="system">
-            System
+            {field.label}
             {required ? ' *' : ''}
           </label>
-          <select id="system" name="system" value={formData.system} onChange={handleChange} required={required}>
+          <select id="system" name="system" value={value} onChange={handleChange} required={required}>
             <option value="">-- Select System --</option>
             {systemFieldOptions.map((option) => (
               <option key={option} value={option}>
@@ -188,16 +258,10 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
       return (
         <div className="form-group" key={field.key}>
           <label htmlFor="activityType">
-            Activity Type
+            {field.label}
             {required ? ' *' : ''}
           </label>
-          <select
-            id="activityType"
-            name="activityType"
-            value={formData.activityType}
-            onChange={handleChange}
-            required={required}
-          >
+          <select id="activityType" name="activityType" value={value} onChange={handleChange} required={required}>
             <option value="">-- Select Activity Type --</option>
             {ACTIVITY_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -216,14 +280,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
             {field.label}
             {required ? ' *' : ''}
           </label>
-          <input
-            type="date"
-            id={field.key}
-            name={field.key}
-            value={formData.date}
-            onChange={handleChange}
-            required={required}
-          />
+          <input type="date" id={field.key} name={field.key} value={value} onChange={handleChange} required={required} />
         </div>
       )
     }
@@ -235,13 +292,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
             {field.label}
             {required ? ' *' : ''}
           </label>
-          <select
-            id={field.key}
-            name={field.key}
-            value={String(formData[field.key] || '')}
-            onChange={handleChange}
-            required={required}
-          >
+          <select id={field.key} name={field.key} value={value} onChange={handleChange} required={required}>
             <option value="">{`-- ${field.placeholder} --`}</option>
             {(field.options || []).map((option) => (
               <option key={option} value={option}>
@@ -249,6 +300,33 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
               </option>
             ))}
           </select>
+        </div>
+      )
+    }
+
+    if (field.type === 'checkbox') {
+      const checked = value.toLowerCase() === 'true'
+      return (
+        <div className="form-group form-group-inline-checkbox" key={field.key}>
+          <div className="moc-inline-control">
+            <span className="moc-inline-title">
+              {field.label}
+              {required ? ' *' : ''}
+            </span>
+            <input
+              type="checkbox"
+              id={field.key}
+              name={field.key}
+              checked={checked}
+              onChange={handleChange}
+              required={required && !checked}
+            />
+          </div>
+          <small className="form-hint">
+            {field.key === 'mocActivity'
+              ? <>When checked, comments are prefixed with <code>{'{MOC}'}</code>.</>
+              : <>When checked, comments are prefixed with <code>{`{${field.label}}`}</code>.</>}
+          </small>
         </div>
       )
     }
@@ -263,7 +341,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
           <textarea
             id={field.key}
             name={field.key}
-            value={String(formData[field.key] || '')}
+            value={value}
             onChange={handleChange}
             placeholder={field.placeholder}
             required={required}
@@ -282,7 +360,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
           type="text"
           id={field.key}
           name={field.key}
-          value={String(formData[field.key] || '')}
+          value={value}
           onChange={handleChange}
           placeholder={field.placeholder}
           required={required}
@@ -291,47 +369,14 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
     )
   }
 
-  const mainGridFields = visibleFields.filter((field) => !['problem', 'action', 'comments'].includes(field.key))
-  const textAreaFields = visibleFields.filter((field) => ['problem', 'action', 'comments'].includes(field.key))
-  const problemField = textAreaFields.find((field) => field.key === 'problem')
-  const actionField = textAreaFields.find((field) => field.key === 'action')
-  const extraTextAreaFields = textAreaFields.filter((field) => !['problem', 'action'].includes(field.key))
-
   return (
     <form onSubmit={handleSubmit} className="activity-form-compact">
-      <div className="form-row form-row-three-up activity-main-grid">
-        {mainGridFields.map((field) => renderField(field))}
-
-        {commentsFieldVisible && (
-          <div className="form-group form-group-inline-checkbox moc-inline-cell">
-            <div className="moc-inline-control">
-              <span className="moc-inline-title">MOC Activity</span>
-              <input
-                type="checkbox"
-                checked={isMocActivity}
-                onChange={(event) => setIsMocActivity(event.target.checked)}
-                aria-label="MOC Activity"
-              />
-            </div>
-            <small className="form-hint">
-              When checked, comments are prefixed with <code>{'{MOC}'}</code>.
-            </small>
-          </div>
-        )}
+      <div
+        className="form-row activity-main-grid"
+        style={{ display: 'grid', gridTemplateColumns: `repeat(${mainGridColumns}, minmax(0, 1fr))`, gap: '1rem' }}
+      >
+        {visibleFields.map((field) => renderField(field))}
       </div>
-
-      {(problemField || actionField) && (
-        <div className="form-row form-row-two-up">
-          {problemField ? renderField(problemField) : <div />}
-          {actionField ? renderField(actionField) : <div />}
-        </div>
-      )}
-
-      {extraTextAreaFields.map((field) => (
-        <div className="form-row" key={field.key}>
-          {renderField(field)}
-        </div>
-      ))}
 
       <div className="form-actions">
         <button type="submit" className="btn btn-primary" disabled={isLoading}>

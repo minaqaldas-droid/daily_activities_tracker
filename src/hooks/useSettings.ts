@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Settings, type Team, getSettings } from '../supabaseClient'
-import { DEFAULT_ACTIVITY_FIELD_CONFIG } from '../utils/activityFields'
-import { DEFAULT_DASHBOARD_CHART_CONFIG } from '../utils/dashboardCharts'
+import { DEFAULT_ACTIVITY_FIELD_CONFIG, DEFAULT_ACTIVITY_FIELD_DEFINITIONS } from '../utils/activityFields'
+import { DEFAULT_DASHBOARD_CARD_CONFIG, DEFAULT_DASHBOARD_CARD_DEFINITIONS } from '../utils/dashboardCards'
+import { DEFAULT_DASHBOARD_CHART_CONFIG, DEFAULT_DASHBOARD_CHART_DEFINITIONS } from '../utils/dashboardCharts'
+import { DEFAULT_LAYOUT_CONFIG } from '../utils/layoutConfig'
 
 const DEFAULT_SETTINGS: Settings = {
   webapp_name: 'Daily Activities Tracker',
@@ -10,11 +12,17 @@ const DEFAULT_SETTINGS: Settings = {
   favicon_url: '',
   primary_color: '#667eea',
   performer_mode: 'manual',
+  show_moc_activity: true,
   header_font_family: '',
   subheader_font_family: '',
   sidebar_font_family: '',
   activity_field_config: DEFAULT_ACTIVITY_FIELD_CONFIG,
+  activity_field_definitions: DEFAULT_ACTIVITY_FIELD_DEFINITIONS,
   dashboard_chart_config: DEFAULT_DASHBOARD_CHART_CONFIG,
+  dashboard_chart_definitions: DEFAULT_DASHBOARD_CHART_DEFINITIONS,
+  dashboard_card_config: DEFAULT_DASHBOARD_CARD_CONFIG,
+  dashboard_card_definitions: DEFAULT_DASHBOARD_CARD_DEFINITIONS,
+  layout_config: DEFAULT_LAYOUT_CONFIG,
 }
 
 const DEFAULT_FAVICON_PATH = '/favicon.svg'
@@ -166,6 +174,19 @@ export function useSettings(isEnabled: boolean, preferredPrimaryColor = '', acti
   const settingsCacheRef = useRef<Map<string, Settings>>(new Map())
   const requestIdRef = useRef(0)
 
+  const setCachedSettings = useCallback(
+    (nextSettings: Settings | ((previous: Settings) => Settings)) => {
+      const teamKey = getTeamCacheKey(activeTeam)
+
+      setSettings((previous) => {
+        const resolvedSettings = typeof nextSettings === 'function' ? nextSettings(previous) : nextSettings
+        settingsCacheRef.current.set(teamKey, resolvedSettings)
+        return resolvedSettings
+      })
+    },
+    [activeTeam]
+  )
+
   const loadSettings = useCallback(async () => {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
@@ -174,14 +195,14 @@ export function useSettings(isEnabled: boolean, preferredPrimaryColor = '', acti
     const cachedSettings = settingsCacheRef.current.get(teamKey)
 
     if (cachedSettings) {
-      setSettings(cachedSettings)
+      setCachedSettings(cachedSettings)
     }
 
     const appSettings = await getSettings(activeTeam)
     settingsCacheRef.current.set(teamKey, appSettings)
 
     if (requestId === requestIdRef.current) {
-      setSettings(appSettings)
+      setCachedSettings(appSettings)
     }
 
     return appSettings
@@ -190,7 +211,7 @@ export function useSettings(isEnabled: boolean, preferredPrimaryColor = '', acti
   useEffect(() => {
     if (!isEnabled) {
       requestIdRef.current += 1
-      setSettings(DEFAULT_SETTINGS)
+      setCachedSettings(DEFAULT_SETTINGS)
       return
     }
 
@@ -244,7 +265,7 @@ export function useSettings(isEnabled: boolean, preferredPrimaryColor = '', acti
 
   return {
     settings,
-    setSettings,
+    setSettings: setCachedSettings,
     loadSettings,
     effectivePrimaryColor: preferredPrimaryColor || settings.primary_color || DEFAULT_PRIMARY_COLOR,
   }

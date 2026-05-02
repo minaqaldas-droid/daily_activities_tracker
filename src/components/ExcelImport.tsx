@@ -122,7 +122,7 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
   const [importProgress, setImportProgress] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
   const activityFieldConfig = getActivityFieldConfig(settings)
-  const visibleFields = getOrderedActivityFields(settings).filter((field) => activityFieldConfig[field.key].enabled)
+  const visibleFields = getOrderedActivityFields(settings).filter((field) => activityFieldConfig[field.key].enabled && field.type !== 'checkbox')
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

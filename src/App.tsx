@@ -25,8 +25,10 @@ import {
   type Settings,
   type Team,
   type User,
+  updateSettings,
 } from './supabaseClient'
 import { formatDateForDisplay } from './utils/date'
+import { getDashboardChartDefinitions, normalizeStoredDashboardChartDefinitions } from './utils/dashboardCharts'
 import { type DashboardResultsFilter } from './types/activityResults'
 
 const ExcelImport = lazy(() =>
@@ -65,7 +67,13 @@ const IMPORT_RESTRICTED_MESSAGE = 'Only Admin users can access Excel import.'
 const ADD_RESTRICTED_MESSAGE = 'Only Admin users can add activities.'
 
 function hasSearchFilters(filters: SearchFilters) {
-  return Object.values(filters).some((value) => Boolean(value))
+  return Object.entries(filters).some(([key, value]) => {
+    if (key === 'customFields') {
+      return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, string>).length > 0)
+    }
+
+    return Boolean(value)
+  })
 }
 
 function includesIgnoreCase(value: string, keyword: string) {
@@ -127,6 +135,19 @@ function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilt
     return false
   }
 
+  if (filters.customFields) {
+    const hasCustomFieldMismatch = Object.entries(filters.customFields).some(
+      ([fieldKey, fieldValue]) =>
+        typeof fieldValue === 'boolean'
+          ? (fieldValue ? String(activity.customFields?.[fieldKey] || '').toLowerCase() !== 'true' : false)
+          : fieldValue && !includesIgnoreCase(activity.customFields?.[fieldKey] || '', fieldValue)
+    )
+
+    if (hasCustomFieldMismatch) {
+      return false
+    }
+  }
+
   if (filters.activityType && (activity.activityType || '') !== filters.activityType) {
     return false
   }
@@ -151,6 +172,7 @@ function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilt
       activity.problem,
       activity.action,
       activity.comments || '',
+      ...Object.values(activity.customFields || {}),
     ]
     const hasKeywordMatch = searchableFields.some((field) =>
       String(field || '')
@@ -182,6 +204,10 @@ function matchesResultsPopupFilter(activity: Activity, filter?: ResultsPopupFilt
       return filter.performers.includes(activity.performer || '')
     case 'hasField':
       return Boolean((activity[filter.field] || '').trim())
+    case 'fieldHasValue':
+      return Boolean(String(activity.customFields?.[filter.fieldKey] || activity[filter.fieldKey as keyof Activity] || '').trim())
+    case 'fieldValue':
+      return String(activity.customFields?.[filter.fieldKey] || activity[filter.fieldKey as keyof Activity] || '') === filter.fieldValue
     case 'recentlyEdited':
       return Boolean(String(activity.edited_at || '').trim())
     case 'sinceDate':
@@ -366,7 +392,7 @@ function App() {
   }, [appUser, currentView, loadActivities])
 
   useEffect(() => {
-    if (!appUser || currentView !== 'search') {
+    if (!appUser || currentView !== 'search' || !effectiveActiveTeam) {
       return
     }
 
@@ -376,7 +402,7 @@ function App() {
         text: error instanceof Error ? error.message : 'Failed to refresh search activities.',
       })
     })
-  }, [appUser, currentView, lastSearchFilters, runSearch, searchApplied])
+  }, [appUser, currentView, effectiveActiveTeam, lastSearchFilters, runSearch, searchApplied])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -442,6 +468,10 @@ function App() {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return
+      }
+
       if (event.key !== 'Escape') {
         return
       }
@@ -707,6 +737,62 @@ function App() {
     setMessage({ type: 'success', text: 'Settings updated successfully.' })
   }
 
+  const handleDashboardChartDisplayCountChange = async (chartKey: string, maxItems: number) => {
+    if (!appUser || !effectiveActiveTeam) {
+      return
+    }
+
+    const currentChart = getDashboardChartDefinitions(settings).find((chart) => chart.key === chartKey)
+    if (!currentChart) {
+      return
+    }
+
+    const normalizedDefinitions = normalizeStoredDashboardChartDefinitions(settings.dashboard_chart_definitions, settings)
+    const existingDefinition = normalizedDefinitions.find((definition) => definition.key === chartKey)
+    const nextDefinition = {
+      key: chartKey,
+      label: existingDefinition?.label || currentChart.label,
+      fieldKey: existingDefinition?.fieldKey || currentChart.fieldKey,
+      chartType: existingDefinition?.chartType || currentChart.chartType,
+      maxItems,
+      includeEmpty: existingDefinition?.includeEmpty ?? currentChart.includeEmpty,
+      archived: existingDefinition?.archived ?? false,
+    }
+    const existingIndex = normalizedDefinitions.findIndex((definition) => definition.key === chartKey)
+    const nextDefinitions =
+      existingIndex === -1
+        ? [...normalizedDefinitions, nextDefinition]
+        : normalizedDefinitions.map((definition, index) => (index === existingIndex ? nextDefinition : definition))
+    const previousSettings = settings
+
+    setSettings((previous) => ({
+      ...previous,
+      dashboard_chart_definitions: nextDefinitions,
+    }))
+
+    try {
+      const updatedSettings = await updateSettings(
+        {
+          dashboard_chart_definitions: nextDefinitions,
+        },
+        appUser.id,
+        effectiveActiveTeam
+      )
+
+      setSettings((previous) => ({
+        ...previous,
+        ...updatedSettings,
+        dashboard_chart_definitions: normalizeStoredDashboardChartDefinitions(updatedSettings.dashboard_chart_definitions, updatedSettings),
+      }))
+    } catch (error) {
+      setSettings(previousSettings)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to save chart display count.',
+      })
+    }
+  }
+
   const handleOpenDashboardResults = async (request: DashboardActivityRequest) => {
     try {
       const popupActivities =
@@ -907,6 +993,8 @@ function App() {
                   onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
                   onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
                   onOpenActivityResults={handleOpenDashboardResults}
+                  canManageChartDisplayCounts={isAdmin}
+                  onUpdateChartDisplayCount={handleDashboardChartDisplayCountChange}
                 />
               </div>
             )}

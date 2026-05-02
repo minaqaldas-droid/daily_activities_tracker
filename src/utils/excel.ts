@@ -36,7 +36,7 @@ function sortActivitiesByDateDescending(activities: Activity[]) {
 }
 
 function buildExportRows(activities: Activity[], systemFieldLabel: string, settings?: Settings) {
-  const enabledActivityFields = getEnabledActivityFields(settings)
+  const enabledActivityFields = getEnabledActivityFields(settings).filter((field) => field.type !== 'checkbox')
 
   return sortActivitiesByDateDescending(activities).map((activity) => ({
     Date: formatExcelDate(activity.date),
@@ -120,7 +120,7 @@ export async function exportActivitiesToExcel(
   }
 
   const XLSX = await import('xlsx')
-  const enabledActivityFields = getEnabledActivityFields(options.settings)
+  const enabledActivityFields = getEnabledActivityFields(options.settings).filter((field) => field.type !== 'checkbox')
 
   const worksheet = XLSX.utils.json_to_sheet(
     buildExportRows(activities, options.systemFieldLabel || 'System', options.settings)

@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { type ActivityTypeValue, ACTIVITY_TYPE_OPTIONS } from '../constants/activityTypes'
 import { type SearchFilters, type Settings, type Team } from '../supabaseClient'
-import {
-  type ConfigurableActivityFieldKey,
-  getEnabledActivityFields,
-  getOrderedActivityFields,
-} from '../utils/activityFields'
+import { getEnabledActivityFields, getOrderedActivityFields } from '../utils/activityFields'
+import { getLayoutConfig } from '../utils/layoutConfig'
 import { getSystemFieldOptions } from '../utils/teamActivityField'
 
 interface SearchFilterProps {
@@ -16,7 +13,37 @@ interface SearchFilterProps {
 }
 
 type DateFilterMode = 'all' | 'single' | 'range'
-type DynamicFilterValues = Partial<Record<ConfigurableActivityFieldKey, string>>
+type DynamicFilterValues = Partial<Record<string, string | boolean>>
+
+function useResponsiveColumns(baseColumns: { mobile: number; tablet: number; desktop: number }) {
+  const [columns, setColumns] = useState(baseColumns.desktop)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const updateColumns = () => {
+      if (window.innerWidth <= 640) {
+        setColumns(baseColumns.mobile)
+        return
+      }
+
+      if (window.innerWidth <= 1024) {
+        setColumns(baseColumns.tablet)
+        return
+      }
+
+      setColumns(baseColumns.desktop)
+    }
+
+    updateColumns()
+    window.addEventListener('resize', updateColumns)
+    return () => window.removeEventListener('resize', updateColumns)
+  }, [baseColumns.desktop, baseColumns.mobile, baseColumns.tablet])
+
+  return columns
+}
 
 export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading = false, activeTeam, settings }) => {
   const [keyword, setKeyword] = useState('')
@@ -25,15 +52,15 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [fieldValues, setFieldValues] = useState<DynamicFilterValues>({})
-  const [hasMoc, setHasMoc] = useState(false)
   const systemFieldOptions = getSystemFieldOptions(activeTeam)
   const visibleFields = getEnabledActivityFields(settings)
   const orderedFields = getOrderedActivityFields(settings)
   const dateFieldEnabled = visibleFields.some((field) => field.key === 'date')
   const filterableFields = orderedFields.filter(
-    (field) => field.key !== 'date' && visibleFields.some((visibleField) => visibleField.key === field.key)
+    (field) => field.key !== 'date' && field.searchable !== false && visibleFields.some((visibleField) => visibleField.key === field.key)
   )
-  const commentsFieldVisible = visibleFields.some((field) => field.key === 'comments')
+  const layoutConfig = getLayoutConfig(settings)
+  const searchColumns = useResponsiveColumns(layoutConfig.searchFilterColumns)
 
   const handleDateModeChange = (nextMode: DateFilterMode) => {
     setDateMode(nextMode)
@@ -48,7 +75,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
     }
   }
 
-  const setFieldValue = (fieldKey: ConfigurableActivityFieldKey, value: string) => {
+  const setFieldValue = (fieldKey: string, value: string | boolean) => {
     setFieldValues((previous) => ({
       ...previous,
       [fieldKey]: value,
@@ -58,19 +85,27 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
   const handleSearch = async (event: React.FormEvent) => {
     event.preventDefault()
 
+    const customFields = Object.fromEntries(
+      Object.entries(fieldValues).filter(([fieldKey, value]) => {
+        const isCustomField = !['performer', 'tag', 'system', 'shift', 'permitNumber', 'instrumentType', 'activityType', 'problem', 'action', 'comments'].includes(fieldKey)
+        return isCustomField && (typeof value === 'boolean' ? value : Boolean(value))
+      })
+    ) as Record<string, string | boolean>
+
     const filters: SearchFilters = {
       keyword: keyword || undefined,
-      performer: fieldValues.performer || undefined,
-      tag: fieldValues.tag || undefined,
-      system: fieldValues.system || undefined,
-      shift: fieldValues.shift || undefined,
-      permitNumber: fieldValues.permitNumber || undefined,
-      instrumentType: fieldValues.instrumentType || undefined,
-      activityType: (fieldValues.activityType as ActivityTypeValue | '') || undefined,
-      problem: fieldValues.problem || undefined,
-      action: fieldValues.action || undefined,
-      comments: fieldValues.comments || undefined,
-      hasMoc: hasMoc || undefined,
+      performer: typeof fieldValues.performer === 'string' ? fieldValues.performer || undefined : undefined,
+      tag: typeof fieldValues.tag === 'string' ? fieldValues.tag || undefined : undefined,
+      system: typeof fieldValues.system === 'string' ? fieldValues.system || undefined : undefined,
+      shift: typeof fieldValues.shift === 'string' ? fieldValues.shift || undefined : undefined,
+      permitNumber: typeof fieldValues.permitNumber === 'string' ? fieldValues.permitNumber || undefined : undefined,
+      instrumentType: typeof fieldValues.instrumentType === 'string' ? fieldValues.instrumentType || undefined : undefined,
+      activityType: (typeof fieldValues.activityType === 'string' ? fieldValues.activityType : '') as ActivityTypeValue | '',
+      problem: typeof fieldValues.problem === 'string' ? fieldValues.problem || undefined : undefined,
+      action: typeof fieldValues.action === 'string' ? fieldValues.action || undefined : undefined,
+      comments: typeof fieldValues.comments === 'string' ? fieldValues.comments || undefined : undefined,
+      customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
+      hasMoc: fieldValues.mocActivity === true ? true : undefined,
     }
 
     if (dateFieldEnabled && dateMode === 'single') {
@@ -91,7 +126,6 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
     setStartDate('')
     setEndDate('')
     setFieldValues({})
-    setHasMoc(false)
     setDateMode('all')
     await onSearch({})
   }
@@ -101,8 +135,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
       singleDate ||
       startDate ||
       endDate ||
-      Object.values(fieldValues).some((value) => Boolean(value)) ||
-      hasMoc
+      Object.values(fieldValues).some((value) => (typeof value === 'boolean' ? value : Boolean(value)))
   )
 
   return (
@@ -112,13 +145,12 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
       </div>
 
       <div className="search-layout">
-        <section className="search-card">
+        <section className="search-card search-keyword-card">
           <div className="search-card-header">
             <h4>Keyword</h4>
           </div>
 
           <div className="form-group">
-            <label htmlFor="keywordSearch">Keyword</label>
             <input
               type="text"
               id="keywordSearch"
@@ -131,12 +163,15 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
           </div>
         </section>
 
-        <section className="search-card">
+        <section className="search-card search-field-filters-card">
           <div className="search-card-header">
             <h4>Field Filters</h4>
           </div>
 
-          <div className="search-grid">
+          <div
+            className="search-grid"
+            style={{ display: 'grid', gridTemplateColumns: `repeat(${searchColumns}, minmax(0, 1fr))`, gap: '1rem' }}
+          >
             {filterableFields.map((field) => {
               if (field.key === 'performer') {
                 return (
@@ -145,9 +180,9 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                     <input
                       id="filterPerformer"
                       type="text"
-                      value={fieldValues.performer || ''}
+                      value={typeof fieldValues.performer === 'string' ? fieldValues.performer : ''}
                       onChange={(event) => setFieldValue('performer', event.target.value)}
-                      placeholder="Search performer..."
+                      placeholder={`Search ${field.label.toLowerCase()}...`}
                       disabled={isLoading}
                     />
                   </div>
@@ -160,7 +195,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                     <label htmlFor="filterSystem">{field.label}</label>
                     <select
                       id="filterSystem"
-                      value={fieldValues.system || ''}
+                      value={typeof fieldValues.system === 'string' ? fieldValues.system : ''}
                       onChange={(event) => setFieldValue('system', event.target.value)}
                       disabled={isLoading}
                     >
@@ -181,7 +216,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                     <label htmlFor="filterActivityType">{field.label}</label>
                     <select
                       id="filterActivityType"
-                      value={fieldValues.activityType || ''}
+                      value={typeof fieldValues.activityType === 'string' ? fieldValues.activityType : ''}
                       onChange={(event) => setFieldValue('activityType', event.target.value)}
                       disabled={isLoading}
                     >
@@ -202,7 +237,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                     <label htmlFor={`filter-${field.key}`}>{field.label}</label>
                     <select
                       id={`filter-${field.key}`}
-                      value={fieldValues[field.key] || ''}
+                      value={String(typeof fieldValues[field.key] === 'string' ? fieldValues[field.key] : '')}
                       onChange={(event) => setFieldValue(field.key, event.target.value)}
                       disabled={isLoading}
                     >
@@ -217,13 +252,30 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                 )
               }
 
+              if (field.type === 'checkbox') {
+                return (
+                  <div className="form-group form-group-inline-checkbox" key={field.key}>
+                    <div className="moc-inline-control">
+                      <span className="moc-inline-title">{field.label}</span>
+                      <input
+                        type="checkbox"
+                        checked={fieldValues[field.key] === true}
+                        onChange={(event) => setFieldValue(field.key, event.target.checked)}
+                        disabled={isLoading}
+                        aria-label={`Filter ${field.label}`}
+                      />
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <div className="form-group" key={field.key}>
                   <label htmlFor={`filter-${field.key}`}>{field.label}</label>
                   <input
                     id={`filter-${field.key}`}
                     type="text"
-                    value={fieldValues[field.key] || ''}
+                    value={String(typeof fieldValues[field.key] === 'string' ? fieldValues[field.key] : '')}
                     onChange={(event) => setFieldValue(field.key, event.target.value)}
                     placeholder={`Search ${field.label.toLowerCase()}...`}
                     disabled={isLoading}
@@ -231,21 +283,6 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                 </div>
               )
             })}
-
-            {commentsFieldVisible && (
-              <div className="form-group form-group-inline-checkbox moc-inline-cell">
-                <div className="moc-inline-control">
-                  <span className="moc-inline-title">MOC Activity</span>
-                  <input
-                    type="checkbox"
-                    checked={hasMoc}
-                    onChange={(event) => setHasMoc(event.target.checked)}
-                    disabled={isLoading}
-                    aria-label="Filter MOC Activity"
-                  />
-                </div>
-              </div>
-            )}
           </div>
         </section>
 
@@ -257,39 +294,18 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
 
             <div className="date-mode-grid" role="radiogroup" aria-label="Date filter mode">
               <label className={`date-mode-card ${dateMode === 'all' ? 'selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="dateMode"
-                  checked={dateMode === 'all'}
-                  onChange={() => handleDateModeChange('all')}
-                  disabled={isLoading}
-                />
+                <input type="radio" name="dateMode" checked={dateMode === 'all'} onChange={() => handleDateModeChange('all')} disabled={isLoading} />
                 <span className="date-mode-title">All Time</span>
-                <span className="date-mode-description">Do not limit the results by date.</span>
               </label>
 
               <label className={`date-mode-card ${dateMode === 'single' ? 'selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="dateMode"
-                  checked={dateMode === 'single'}
-                  onChange={() => handleDateModeChange('single')}
-                  disabled={isLoading}
-                />
+                <input type="radio" name="dateMode" checked={dateMode === 'single'} onChange={() => handleDateModeChange('single')} disabled={isLoading} />
                 <span className="date-mode-title">Specific Date</span>
-                <span className="date-mode-description">Show activities from one selected day.</span>
               </label>
 
               <label className={`date-mode-card ${dateMode === 'range' ? 'selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="dateMode"
-                  checked={dateMode === 'range'}
-                  onChange={() => handleDateModeChange('range')}
-                  disabled={isLoading}
-                />
+                <input type="radio" name="dateMode" checked={dateMode === 'range'} onChange={() => handleDateModeChange('range')} disabled={isLoading} />
                 <span className="date-mode-title">Date Range</span>
-                <span className="date-mode-description">Filter between a start and end date.</span>
               </label>
             </div>
 
@@ -303,13 +319,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
               <div className="date-input-panel">
                 <div className="form-group">
                   <label htmlFor="singleDate">Specific Date</label>
-                  <input
-                    type="date"
-                    id="singleDate"
-                    value={singleDate}
-                    onChange={(event) => setSingleDate(event.target.value)}
-                    disabled={isLoading}
-                  />
+                  <input type="date" id="singleDate" value={singleDate} onChange={(event) => setSingleDate(event.target.value)} disabled={isLoading} />
                 </div>
               </div>
             )}
@@ -319,24 +329,12 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
                 <div className="form-row form-row-two-up">
                   <div className="form-group">
                     <label htmlFor="startDate">From</label>
-                    <input
-                      type="date"
-                      id="startDate"
-                      value={startDate}
-                      onChange={(event) => setStartDate(event.target.value)}
-                      disabled={isLoading}
-                    />
+                    <input type="date" id="startDate" value={startDate} onChange={(event) => setStartDate(event.target.value)} disabled={isLoading} />
                   </div>
 
                   <div className="form-group">
                     <label htmlFor="endDate">To</label>
-                    <input
-                      type="date"
-                      id="endDate"
-                      value={endDate}
-                      onChange={(event) => setEndDate(event.target.value)}
-                      disabled={isLoading}
-                    />
+                    <input type="date" id="endDate" value={endDate} onChange={(event) => setEndDate(event.target.value)} disabled={isLoading} />
                   </div>
                 </div>
               </div>

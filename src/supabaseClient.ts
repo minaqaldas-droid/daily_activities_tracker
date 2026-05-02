@@ -9,8 +9,31 @@ import {
 import { type ActivityTypeValue, getActivityTypeLabel } from './constants/activityTypes'
 import { type DashboardResultsFilter } from './types/activityResults'
 import { formatDateForDisplay, normalizeDateForApp } from './utils/date'
-import { type ActivityFieldConfig } from './utils/activityFields'
-import { type DashboardChartConfig } from './utils/dashboardCharts'
+import {
+  DEFAULT_ACTIVITY_FIELD_CONFIG,
+  DEFAULT_ACTIVITY_FIELD_DEFINITIONS,
+  getCoreActivityFieldDefinitions,
+  normalizeStoredActivityFieldDefinitions,
+  type ActivityFieldConfig,
+  type StoredActivityFieldDefinition,
+} from './utils/activityFields'
+import {
+  DEFAULT_DASHBOARD_CHART_CONFIG,
+  DEFAULT_DASHBOARD_CHART_DEFINITIONS,
+  getCoreDashboardChartDefinitions,
+  normalizeStoredDashboardChartDefinitions,
+  type DashboardChartConfig,
+  type StoredDashboardChartDefinition,
+} from './utils/dashboardCharts'
+import {
+  DEFAULT_DASHBOARD_CARD_CONFIG,
+  DEFAULT_DASHBOARD_CARD_DEFINITIONS,
+  getCoreDashboardCardDefinitions,
+  normalizeStoredDashboardCardDefinitions,
+  type DashboardCardConfig,
+  type StoredDashboardCardDefinition,
+} from './utils/dashboardCards'
+import { DEFAULT_LAYOUT_CONFIG, type LayoutConfig } from './utils/layoutConfig'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -44,6 +67,7 @@ export interface Activity {
   problem: string
   action: string
   comments: string
+  customFields?: Record<string, string>
   editedBy?: string | null
   created_at?: string
   edited_at?: string | null
@@ -91,11 +115,17 @@ export interface Settings {
   favicon_url?: string
   primary_color?: string
   performer_mode?: 'manual' | 'auto'
+  show_moc_activity?: boolean
   header_font_family?: string
   subheader_font_family?: string
   sidebar_font_family?: string
   activity_field_config?: ActivityFieldConfig
+  activity_field_definitions?: StoredActivityFieldDefinition[]
   dashboard_chart_config?: DashboardChartConfig
+  dashboard_chart_definitions?: StoredDashboardChartDefinition[]
+  dashboard_card_config?: DashboardCardConfig
+  dashboard_card_definitions?: StoredDashboardCardDefinition[]
+  layout_config?: LayoutConfig
   updated_at?: string
   updated_by?: string
 }
@@ -114,6 +144,7 @@ export interface SearchFilters {
   problem?: string
   action?: string
   comments?: string
+  customFields?: Record<string, string | boolean>
   keyword?: string
   hasMoc?: boolean
 }
@@ -191,6 +222,12 @@ export interface ManagedTeam {
   created_at?: string
 }
 
+export interface ReusableEditorCatalogs {
+  fields: StoredActivityFieldDefinition[]
+  charts: StoredDashboardChartDefinition[]
+  cards: StoredDashboardCardDefinition[]
+}
+
 export interface TeamManagedUser extends AdminManagedUser {
   team_ids: string[]
   team_roles: Record<string, UserRole>
@@ -221,30 +258,70 @@ const DEFAULT_SETTINGS: Settings = {
   favicon_url: '',
   primary_color: '#667eea',
   performer_mode: 'manual',
+  show_moc_activity: true,
   header_font_family: '',
   subheader_font_family: '',
   sidebar_font_family: '',
-  activity_field_config: {
-    date: { enabled: true, required: true, order: 10 },
-    performer: { enabled: true, required: true, order: 20 },
-    system: { enabled: true, required: true, order: 30 },
-    shift: { enabled: false, required: false, order: 40 },
-    permitNumber: { enabled: false, required: false, order: 50 },
-    instrumentType: { enabled: false, required: false, order: 60 },
-    activityType: { enabled: true, required: true, order: 70 },
-    tag: { enabled: true, required: true, order: 80 },
-    problem: { enabled: true, required: true, order: 90 },
-    action: { enabled: true, required: true, order: 100 },
-    comments: { enabled: true, required: false, order: 110 },
-  },
-  dashboard_chart_config: {
-    activityType: { enabled: true, order: 1 },
-    performer: { enabled: true, order: 2 },
-    system: { enabled: true, order: 3 },
-    shift: { enabled: true, order: 4 },
-    instrumentType: { enabled: true, order: 5 },
-    topTags: { enabled: true, order: 6 },
-  },
+  activity_field_config: DEFAULT_ACTIVITY_FIELD_CONFIG,
+  activity_field_definitions: DEFAULT_ACTIVITY_FIELD_DEFINITIONS,
+  dashboard_chart_config: DEFAULT_DASHBOARD_CHART_CONFIG,
+  dashboard_chart_definitions: DEFAULT_DASHBOARD_CHART_DEFINITIONS,
+  dashboard_card_config: DEFAULT_DASHBOARD_CARD_CONFIG,
+  dashboard_card_definitions: DEFAULT_DASHBOARD_CARD_DEFINITIONS,
+  layout_config: DEFAULT_LAYOUT_CONFIG,
+}
+
+function getArchivedCoreActivityFieldSettings(): StoredActivityFieldDefinition[] {
+  return getCoreActivityFieldDefinitions().map((field) => ({
+    key: field.key,
+    label: field.label,
+    placeholder: field.placeholder,
+    type: field.type,
+    options: field.options || [],
+    searchable: field.searchable !== false,
+    tableBadge: Boolean(field.tableBadge),
+    archived: true,
+  }))
+}
+
+function getArchivedCoreDashboardChartSettings(): StoredDashboardChartDefinition[] {
+  return getCoreDashboardChartDefinitions().map((chart) => ({
+    key: chart.key,
+    label: chart.label,
+    fieldKey: chart.fieldKey,
+    chartType: chart.chartType,
+    maxItems: chart.maxItems,
+    includeEmpty: chart.includeEmpty,
+    archived: true,
+  }))
+}
+
+function getArchivedCoreDashboardCardSettings(): StoredDashboardCardDefinition[] {
+  return getCoreDashboardCardDefinitions().map((card) => ({
+    key: card.key,
+    label: card.label,
+    metric: card.metric,
+    icon: card.icon,
+    fieldKey: card.fieldKey,
+    fieldValue: card.fieldValue,
+    description: card.description,
+    archived: true,
+  }))
+}
+
+function getEmptyDynamicTeamSettings(teamName: string): Settings {
+  return {
+    ...DEFAULT_SETTINGS,
+    webapp_name: `${teamName} Activities Tracker`,
+    browser_tab_name: `${teamName} Activities`,
+    show_moc_activity: false,
+    activity_field_definitions: getArchivedCoreActivityFieldSettings(),
+    activity_field_config: {},
+    dashboard_chart_definitions: getArchivedCoreDashboardChartSettings(),
+    dashboard_chart_config: {},
+    dashboard_card_definitions: getArchivedCoreDashboardCardSettings(),
+    dashboard_card_config: {},
+  }
 }
 
 function isMissingColumnError(error: unknown, columnName: string) {
@@ -713,6 +790,7 @@ function getFormattedActivity(activity: Activity) {
     problem: activity.problem ?? '',
     action: activity.action ?? '',
     comments: activity.comments ?? '',
+    custom_fields: activity.customFields ?? {},
     editedBy: activity.editedBy ?? null,
   }
 
@@ -735,6 +813,7 @@ function normalizeActivity(activity: Partial<Activity>): Activity {
   const databaseActivity = activity as Partial<Activity> & {
     permit_number?: string | null
     instrument_type?: string | null
+    custom_fields?: Record<string, unknown> | null
   }
 
   return {
@@ -750,6 +829,13 @@ function normalizeActivity(activity: Partial<Activity>): Activity {
     problem: activity.problem ?? '',
     action: activity.action ?? '',
     comments: activity.comments ?? '',
+    customFields: Object.entries(databaseActivity.custom_fields || {}).reduce<Record<string, string>>(
+      (accumulator, [key, value]) => {
+        accumulator[key] = String(value ?? '')
+        return accumulator
+      },
+      {}
+    ),
     editedBy: activity.editedBy ?? null,
     created_at: activity.created_at,
     edited_at: activity.edited_at ?? null,
@@ -770,6 +856,7 @@ function getActivityUpdatePayload(activity: Partial<Activity>) {
   if ('problem' in activity) payload.problem = activity.problem ?? ''
   if ('action' in activity) payload.action = activity.action ?? ''
   if ('comments' in activity) payload.comments = activity.comments ?? ''
+  if ('customFields' in activity) payload.custom_fields = activity.customFields ?? {}
   if ('editedBy' in activity) payload.editedBy = activity.editedBy ?? null
   if ('edited_at' in activity) payload.edited_at = activity.edited_at ?? null
 
@@ -777,14 +864,20 @@ function getActivityUpdatePayload(activity: Partial<Activity>) {
 }
 
 function matchesSearchFilters(filters: SearchFilters) {
-  return Object.values(filters).some((value) => Boolean(value))
+  return Object.entries(filters).some(([key, value]) => {
+    if (key === 'customFields') {
+      return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, string>).length > 0)
+    }
+
+    return Boolean(value)
+  })
 }
 
 const ACTIVITY_FETCH_BATCH_SIZE = 1000
 const FULL_ACTIVITY_SELECT_COLUMNS =
-  'id,date,performer,system,shift,permit_number,instrument_type,activityType,tag,problem,action,comments,editedBy,created_at,edited_at'
+  'id,date,performer,system,shift,permit_number,instrument_type,activityType,tag,problem,action,comments,custom_fields,editedBy,created_at,edited_at'
 const DASHBOARD_ACTIVITY_SELECT_COLUMNS =
-  'date,performer,system,shift,instrument_type,activityType,tag,editedBy,created_at,edited_at'
+  'date,performer,system,shift,instrument_type,activityType,tag,custom_fields,editedBy,created_at,edited_at'
 
 async function fetchAllActivitiesBatched(buildQuery: () => any) {
   let offset = 0
@@ -1258,11 +1351,7 @@ export async function getSettings(team?: Team | null) {
       } as Settings
     }
 
-    return {
-      ...DEFAULT_SETTINGS,
-      webapp_name: `${activeTeam.name} Activities Tracker`,
-      browser_tab_name: `${activeTeam.name} Activities`,
-    }
+    return getEmptyDynamicTeamSettings(activeTeam.name)
   } catch (error) {
     console.error('Error fetching settings:', error)
     throw error
@@ -1272,25 +1361,60 @@ export async function getSettings(team?: Team | null) {
 export async function updateSettings(settings: Partial<Settings>, userId: string, team?: Team | null) {
   try {
     const activeTeam = requireActiveTeam(team)
-    const { data, error } = await supabase
+    const { data: existingSettings, error: existingSettingsError } = await supabase
       .from('team_settings')
-      .upsert(
-        [
-          {
-            ...DEFAULT_SETTINGS,
-            ...settings,
-            team_id: activeTeam.id,
-            updated_at: new Date().toISOString(),
-            updated_by: userId,
-          },
-        ],
-        { onConflict: 'team_id' }
-      )
+      .select('*')
+      .eq('team_id', activeTeam.id)
+      .maybeSingle()
+
+    if (existingSettingsError) throw existingSettingsError
+
+    const buildPayload = (includeMocVisibility: boolean) => {
+      const baseDefaults = includeMocVisibility
+        ? DEFAULT_SETTINGS
+        : Object.fromEntries(Object.entries(DEFAULT_SETTINGS).filter(([key]) => key !== 'show_moc_activity'))
+      const mergedExistingSettings = includeMocVisibility
+        ? existingSettings || {}
+        : Object.fromEntries(Object.entries(existingSettings || {}).filter(([key]) => key !== 'show_moc_activity'))
+      const mergedIncomingSettings = includeMocVisibility
+        ? settings
+        : Object.fromEntries(Object.entries(settings).filter(([key]) => key !== 'show_moc_activity'))
+
+      return {
+        ...baseDefaults,
+        ...mergedExistingSettings,
+        ...mergedIncomingSettings,
+        team_id: activeTeam.id,
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      }
+    }
+
+    let retriedWithoutMocVisibility = false
+    let { data, error } = await supabase
+      .from('team_settings')
+      .upsert([buildPayload(true)], { onConflict: 'team_id' })
       .select()
       .single()
 
+    if (error && isMissingColumnError(error, 'show_moc_activity')) {
+      retriedWithoutMocVisibility = true
+      ;({ data, error } = await supabase
+        .from('team_settings')
+        .upsert([buildPayload(false)], { onConflict: 'team_id' })
+        .select()
+        .single())
+    }
+
     if (error) throw error
-    return data as Settings
+    return {
+      ...DEFAULT_SETTINGS,
+      ...(data as Settings),
+      show_moc_activity:
+        retriedWithoutMocVisibility || !('show_moc_activity' in (data || {}))
+          ? settings.show_moc_activity ?? existingSettings?.show_moc_activity ?? DEFAULT_SETTINGS.show_moc_activity
+          : (data as Settings).show_moc_activity,
+    } as Settings
   } catch (error) {
     console.error('Error updating settings:', error)
     throw error
@@ -1377,6 +1501,98 @@ export async function getManagedTeams(): Promise<ManagedTeam[]> {
   }))
 }
 
+export async function getReusableEditorCatalogs(): Promise<ReusableEditorCatalogs> {
+  const { data, error } = await supabase
+    .from('team_settings')
+    .select('activity_field_definitions, dashboard_chart_definitions, dashboard_card_definitions')
+
+  if (error) {
+    throw error
+  }
+
+  const fieldMap = new Map<string, StoredActivityFieldDefinition>()
+  getCoreActivityFieldDefinitions().forEach((field) => {
+    fieldMap.set(field.key, {
+      key: field.key,
+      label: field.label,
+      placeholder: field.placeholder,
+      type: field.type,
+      options: field.options || [],
+      searchable: field.searchable !== false,
+      tableBadge: Boolean(field.tableBadge),
+      archived: false,
+    })
+  })
+
+  const rows = (data || []) as Array<{
+    activity_field_definitions?: unknown
+    dashboard_chart_definitions?: unknown
+    dashboard_card_definitions?: unknown
+  }>
+
+  rows.forEach((row) => {
+    normalizeStoredActivityFieldDefinitions(row.activity_field_definitions).forEach((field) => {
+      if (!field.archived && !fieldMap.has(field.key)) {
+        fieldMap.set(field.key, field)
+      }
+    })
+  })
+
+  const fieldCatalog = Array.from(fieldMap.values())
+  const fieldCatalogSettings = {
+    activity_field_definitions: fieldCatalog,
+  } as Settings
+
+  const chartMap = new Map<string, StoredDashboardChartDefinition>()
+  getCoreDashboardChartDefinitions().forEach((chart) => {
+    chartMap.set(chart.key, {
+      key: chart.key,
+      label: chart.label,
+      fieldKey: chart.fieldKey,
+      chartType: chart.chartType,
+      maxItems: chart.maxItems,
+      includeEmpty: chart.includeEmpty,
+      archived: false,
+    })
+  })
+
+  rows.forEach((row) => {
+    normalizeStoredDashboardChartDefinitions(row.dashboard_chart_definitions, fieldCatalogSettings).forEach((chart) => {
+      if (!chart.archived && !chartMap.has(chart.key)) {
+        chartMap.set(chart.key, chart)
+      }
+    })
+  })
+
+  const cardMap = new Map<string, StoredDashboardCardDefinition>()
+  getCoreDashboardCardDefinitions().forEach((card) => {
+    cardMap.set(card.key, {
+      key: card.key,
+      label: card.label,
+      metric: card.metric,
+      icon: card.icon,
+      fieldKey: card.fieldKey,
+      fieldValue: card.fieldValue,
+      description: card.description,
+      archived: false,
+    })
+  })
+
+  rows.forEach((row) => {
+    normalizeStoredDashboardCardDefinitions(row.dashboard_card_definitions).forEach((card) => {
+      if (!card.archived && !cardMap.has(card.key)) {
+        cardMap.set(card.key, card)
+      }
+    })
+  })
+
+  return {
+    fields: Array.from(fieldMap.values()),
+    charts: Array.from(chartMap.values()),
+    cards: Array.from(cardMap.values()),
+  }
+}
+
 function slugifyTeamName(name: string) {
   return name
     .trim()
@@ -1403,13 +1619,30 @@ export async function createManagedTeam(input: { name: string; slug?: string }) 
     throw error
   }
 
-  await supabase.from('team_settings').insert([
-    {
-      team_id: data.id,
-      webapp_name: `${data.name} Activities Tracker`,
-      browser_tab_name: `${data.name} Activities`,
-    },
-  ])
+  const initialTeamSettings = getEmptyDynamicTeamSettings(data.name)
+
+  const buildInitialTeamSettingsPayload = (includeMocVisibility: boolean) => ({
+    team_id: data.id,
+    webapp_name: initialTeamSettings.webapp_name,
+    browser_tab_name: initialTeamSettings.browser_tab_name,
+    ...(includeMocVisibility ? { show_moc_activity: false } : {}),
+    activity_field_definitions: initialTeamSettings.activity_field_definitions,
+    activity_field_config: initialTeamSettings.activity_field_config,
+    dashboard_chart_definitions: initialTeamSettings.dashboard_chart_definitions,
+    dashboard_chart_config: initialTeamSettings.dashboard_chart_config,
+    dashboard_card_definitions: initialTeamSettings.dashboard_card_definitions,
+    dashboard_card_config: initialTeamSettings.dashboard_card_config,
+  })
+
+  let { error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(true)])
+
+  if (settingsInsertError && isMissingColumnError(settingsInsertError, 'show_moc_activity')) {
+    ;({ error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(false)]))
+  }
+
+  if (settingsInsertError) {
+    throw settingsInsertError
+  }
 
   return normalizeTeam(data)
 }
@@ -1729,6 +1962,21 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
     )
 
     let results = (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+
+    if (filters.customFields && Object.keys(filters.customFields).length > 0) {
+      results = results.filter((activity) =>
+        Object.entries(filters.customFields || {}).every(([fieldKey, value]) => {
+          const activityValue = String(activity.customFields?.[fieldKey] || '')
+
+          if (typeof value === 'boolean') {
+            return value ? activityValue.toLowerCase() === 'true' : !activityValue
+          }
+
+          return activityValue.toLowerCase().includes(String(value || '').toLowerCase())
+        })
+      )
+    }
+
     if (filters.keyword) {
       const keyword = filters.keyword.toLowerCase()
       results = results.filter((activity) =>
@@ -1746,6 +1994,7 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
           activity.problem,
           activity.action,
           activity.comments ?? '',
+          ...Object.values(activity.customFields || {}),
         ].some((field) => String(field).toLowerCase().includes(keyword))
       )
     }
@@ -1780,6 +2029,36 @@ export async function getActivitiesForDashboardFilter(filter: DashboardResultsFi
           break
         case 'hasField':
           query = query.not(filter.field, 'is', null).neq(filter.field, '')
+          break
+        case 'fieldHasValue':
+          if (
+            ['date', 'performer', 'system', 'shift', 'permitNumber', 'instrumentType', 'activityType', 'tag', 'problem', 'action', 'comments'].includes(
+              filter.fieldKey
+            )
+          ) {
+            const databaseFieldKey =
+              filter.fieldKey === 'permitNumber'
+                ? 'permit_number'
+                : filter.fieldKey === 'instrumentType'
+                  ? 'instrument_type'
+                  : filter.fieldKey
+            query = query.not(databaseFieldKey, 'is', null).neq(databaseFieldKey, '')
+          }
+          break
+        case 'fieldValue':
+          if (
+            ['date', 'performer', 'system', 'shift', 'permitNumber', 'instrumentType', 'activityType', 'tag', 'problem', 'action', 'comments'].includes(
+              filter.fieldKey
+            )
+          ) {
+            const databaseFieldKey =
+              filter.fieldKey === 'permitNumber'
+                ? 'permit_number'
+                : filter.fieldKey === 'instrumentType'
+                  ? 'instrument_type'
+                  : filter.fieldKey
+            query = query.eq(databaseFieldKey, filter.fieldValue)
+          }
           break
         case 'recentlyEdited':
           query = query.not('edited_at', 'is', null)
@@ -1817,7 +2096,17 @@ export async function getActivitiesForDashboardFilter(filter: DashboardResultsFi
     }
 
     const data = await fetchAllActivitiesBatched(buildQuery)
-    return (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+    let results = (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
+
+    if (filter.kind === 'fieldHasValue' && !['date', 'performer', 'system', 'shift', 'permitNumber', 'instrumentType', 'activityType', 'tag', 'problem', 'action', 'comments'].includes(filter.fieldKey)) {
+      results = results.filter((activity) => Boolean(String(activity.customFields?.[filter.fieldKey] || '').trim()))
+    }
+
+    if (filter.kind === 'fieldValue' && !['date', 'performer', 'system', 'shift', 'permitNumber', 'instrumentType', 'activityType', 'tag', 'problem', 'action', 'comments'].includes(filter.fieldKey)) {
+      results = results.filter((activity) => String(activity.customFields?.[filter.fieldKey] || '') === filter.fieldValue)
+    }
+
+    return results
   } catch (error) {
     console.error('Error fetching dashboard filter activities:', error)
     throw error
