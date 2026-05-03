@@ -28,6 +28,7 @@ import {
 import { formatDateForDisplay } from './utils/date'
 import { getDashboardChartDefinitions } from './utils/dashboardCharts'
 import { matchesActivityKeyword } from './utils/activityKeywordSearch'
+import { readPersistedAppView, resolveAccessibleView, writePersistedAppView } from './utils/viewPreferences'
 import {
   applyDashboardChartDisplayCountOverrides,
   readDashboardChartDisplayCountOverrides,
@@ -557,6 +558,35 @@ function App() {
     () => applyDashboardChartDisplayCountOverrides(settings, dashboardChartDisplayCountOverrides),
     [dashboardChartDisplayCountOverrides, settings]
   )
+
+  useEffect(() => {
+    if (!appUser) {
+      return
+    }
+
+    const restoredView = readPersistedAppView(appUser.id, effectiveActiveTeam?.id || '')
+    if (!restoredView) {
+      return
+    }
+
+    setCurrentView(
+      resolveAccessibleView(restoredView, {
+        canViewDashboard,
+        canAddActivity,
+        canSearch,
+        canImport,
+        canExport,
+      })
+    )
+  }, [appUser, canAddActivity, canExport, canImport, canSearch, canViewDashboard, effectiveActiveTeam?.id])
+
+  useEffect(() => {
+    if (!appUser) {
+      return
+    }
+
+    writePersistedAppView(appUser.id, effectiveActiveTeam?.id || '', currentView)
+  }, [appUser, currentView, effectiveActiveTeam?.id])
 
   const handleBackToTop = () => {
     if (typeof window === 'undefined') {
