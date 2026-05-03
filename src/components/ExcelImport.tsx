@@ -121,6 +121,29 @@ function getWorksheetDisplayRows(
   return rows
 }
 
+export function applyImportedCommentCheckboxes(activity: Activity, checkboxFields: ActivityFieldDefinition[]) {
+  const parsedComment = parseCommentPrefixes(activity.comments)
+  const checkboxFieldMap = new Map(checkboxFields.map((field) => [field.label.trim().toLowerCase(), field]))
+  const importedCustomFields = { ...(activity.customFields || {}) }
+
+  if (checkboxFields.some((field) => field.key === 'mocActivity')) {
+    importedCustomFields.mocActivity = parsedComment.hasMoc ? 'true' : importedCustomFields.mocActivity || ''
+  }
+
+  parsedComment.checkboxLabels.forEach((label) => {
+    const matchingField = checkboxFieldMap.get(label.trim().toLowerCase())
+    if (matchingField) {
+      importedCustomFields[matchingField.key] = 'true'
+    }
+  })
+
+  return {
+    ...activity,
+    comments: activity.comments,
+    customFields: importedCustomFields,
+  }
+}
+
 export const ExcelImport: React.FC<ExcelImportProps> = ({
   onImportSuccess,
   onImportError,
@@ -222,26 +245,7 @@ export const ExcelImport: React.FC<ExcelImportProps> = ({
           customFields: {},
         })
 
-        const parsedComment = parseCommentPrefixes(importedActivity.comments)
-        const checkboxFieldMap = new Map(checkboxFields.map((field) => [field.label.trim().toLowerCase(), field]))
-        const importedCustomFields = { ...(importedActivity.customFields || {}) }
-
-        if (checkboxFields.some((field) => field.key === 'mocActivity')) {
-          importedCustomFields.mocActivity = parsedComment.hasMoc ? 'true' : importedCustomFields.mocActivity || ''
-        }
-
-        parsedComment.checkboxLabels.forEach((label) => {
-          const matchingField = checkboxFieldMap.get(label.trim().toLowerCase())
-          if (matchingField) {
-            importedCustomFields[matchingField.key] = 'true'
-          }
-        })
-
-        activities.push({
-          ...importedActivity,
-          comments: parsedComment.commentBody,
-          customFields: importedCustomFields,
-        })
+        activities.push(applyImportedCommentCheckboxes(importedActivity, checkboxFields))
       })
 
       if (activities.length === 0) {
