@@ -189,19 +189,25 @@ export const ActivityResultsPopup: React.FC<ActivityResultsPopupProps> = ({
         </div>
 
         <div className="results-popup-body">
-          <ActivityList
-            activities={pagedActivities}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            activeTeam={activeTeam}
-            settings={settings}
-            isLoading={isLoading || isExporting}
-            canEdit={canEdit}
-            canDelete={canDelete}
-            onEditDenied={onEditDenied}
-            onDeleteDenied={onDeleteDenied}
-            emptyMessage="No activities found for this view."
-          />
+          {isLoading ? (
+            <div className="empty-state">
+              <p>Loading activities...</p>
+            </div>
+          ) : (
+            <ActivityList
+              activities={pagedActivities}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              activeTeam={activeTeam}
+              settings={settings}
+              isLoading={isLoading || isExporting}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              onEditDenied={onEditDenied}
+              onDeleteDenied={onDeleteDenied}
+              emptyMessage="No activities found for this view."
+            />
+          )}
 
           <div className="results-popup-pagination">
             <button

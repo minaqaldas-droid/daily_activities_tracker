@@ -57,7 +57,7 @@ const CHART_COLORS = [
   'var(--chart-color-10)',
 ]
 
-function createActivityTypeChartData(activities: Activity[]) {
+function createActivityTypeChartData(activities: Activity[], includeEmpty = false) {
   const counts = ACTIVITY_TYPE_OPTIONS.reduce<Record<string, number>>((accumulator, option) => {
     accumulator[option.value] = 0
     return accumulator
@@ -74,7 +74,7 @@ function createActivityTypeChartData(activities: Activity[]) {
     value: counts[option.value] || 0,
   })).filter((item) => item.value > 0)
 
-  if (counts[''] > 0) {
+  if (includeEmpty && counts[''] > 0) {
     data.push({ key: '', label: 'Unspecified', value: counts[''] })
   }
 
@@ -183,7 +183,6 @@ function PieChartCard({
         </h3>
         {canManageDisplayCount && onUpdateDisplayCount ? (
           <label className="dashboard-chart-count-control">
-            <span>Items</span>
             <select value={maxItems} onChange={(event) => onUpdateDisplayCount(chartKey, Number(event.target.value))}>
               {DASHBOARD_CHART_ITEM_LIMIT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
@@ -261,7 +260,6 @@ function BarChartCard({
         </h3>
         {canManageDisplayCount && onUpdateDisplayCount ? (
           <label className="dashboard-chart-count-control">
-            <span>Items</span>
             <select value={maxItems} onChange={(event) => onUpdateDisplayCount(chartKey, Number(event.target.value))}>
               {DASHBOARD_CHART_ITEM_LIMIT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
@@ -377,6 +375,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
         .slice(0, 20),
     [activities]
   )
+  const chartDataByKey = useMemo(() => {
+    const nextData = new Map<string, ChartDatum[]>()
+
+    enabledCharts.forEach((chart) => {
+      const data =
+        chart.fieldKey === 'activityType'
+          ? createActivityTypeChartData(activities, Boolean(chart.includeEmpty)).slice(0, chart.maxItems || DEFAULT_CHART_ITEM_LIMIT)
+          : createFieldChartData(activities, chart.fieldKey, {
+              includeEmpty: chart.includeEmpty,
+              limit: chart.maxItems,
+              settings,
+              activeTeam,
+            })
+
+      nextData.set(chart.key, data)
+    })
+
+    return nextData
+  }, [activeTeam, activities, enabledCharts, settings])
 
   const openActivityResults = (request: DashboardActivityRequest) => onOpenActivityResults?.(request)
 
@@ -470,15 +487,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           : chart.fieldKey === 'system'
             ? 'system-chart-card'
             : ''
-    const data =
-      chart.fieldKey === 'activityType'
-        ? createActivityTypeChartData(activities).slice(0, chart.maxItems || DEFAULT_CHART_ITEM_LIMIT)
-        : createFieldChartData(activities, chart.fieldKey, {
-            includeEmpty: chart.includeEmpty,
-            limit: chart.maxItems,
-            settings,
-            activeTeam,
-          })
+    const data = chartDataByKey.get(chart.key) || []
 
     const onValueSelect = (item: ChartDatum) => {
       openActivityResults({

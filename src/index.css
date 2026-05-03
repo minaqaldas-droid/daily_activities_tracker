@@ -881,30 +881,22 @@ body.modal-open {
 .dashboard-chart-count-control {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #dbe3ef;
-  border-radius: 12px;
-  background: #f8fafc;
-  color: #334155;
+  padding: 0;
+  border: 0;
+  background: transparent;
   flex-shrink: 0;
 }
 
-.dashboard-chart-count-control span {
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .dashboard-chart-count-control select {
-  min-width: 78px;
-  padding: 8px 10px;
+  min-width: 68px;
+  height: 44px;
+  padding: 0 14px;
   border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: white;
+  border-radius: 12px;
+  background: #ffffff;
   color: #0f172a;
   font-weight: 600;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 
 .chart-pie {
@@ -1012,13 +1004,13 @@ body.modal-open {
 
 @media (max-width: 768px) {
   .dashboard-chart-card-header {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
   }
 
   .dashboard-chart-count-control {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-end;
   }
 
   .chart-legend {
@@ -6754,8 +6746,8 @@ body.modal-open .back-to-top-button {
 
 @media (max-width: 768px) {
   .dashboard-chart-card-header {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
 
   .top-tags-chart-card .chart-list {

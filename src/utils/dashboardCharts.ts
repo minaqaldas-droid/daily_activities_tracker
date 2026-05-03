@@ -93,6 +93,18 @@ function normalizeChartKey(value: string) {
     .join('')
 }
 
+function normalizeBoolean(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase() === 'true'
+  }
+
+  return false
+}
+
 export function normalizeStoredDashboardChartDefinitions(value: unknown, settings?: Settings | null) {
   if (!Array.isArray(value)) {
     return []
@@ -112,7 +124,7 @@ export function normalizeStoredDashboardChartDefinitions(value: unknown, setting
     const label = String(raw.label || '').trim()
     const fieldKey = String(raw.fieldKey || '').trim()
     const chartType = raw.chartType
-    const isArchived = Boolean(raw.archived)
+    const isArchived = normalizeBoolean(raw.archived)
 
     if (!key || !label || !fieldKey || !chartType || !['pie', 'bar'].includes(chartType) || (!isArchived && !validFieldKeys.has(fieldKey))) {
       return
@@ -129,7 +141,7 @@ export function normalizeStoredDashboardChartDefinitions(value: unknown, setting
       fieldKey,
       chartType,
       maxItems: Number.isFinite(Number(raw.maxItems)) ? Math.max(1, Number(raw.maxItems)) : undefined,
-      includeEmpty: Boolean(raw.includeEmpty),
+      includeEmpty: normalizeBoolean(raw.includeEmpty),
       archived: isArchived,
     })
   })

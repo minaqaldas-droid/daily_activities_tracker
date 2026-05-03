@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, startTransition, useEffect, useMemo, useState } from 'react'
+import React, { Suspense, lazy, startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { AccountSettings } from './components/AccountSettings'
 import { ActivityForm } from './components/ActivityForm'
 import { ActivityList } from './components/ActivityList'
@@ -56,6 +56,7 @@ interface ResultsPopupState {
   activities: Activity[]
   exportFilename: string
   filter?: ResultsPopupFilter
+  isLoading?: boolean
 }
 
 type ResultsPopupFilter = DashboardResultsFilter | { kind: 'search'; filters: SearchFilters }
@@ -137,10 +138,16 @@ function matchesSearchFiltersForActivity(activity: Activity, filters: SearchFilt
 
   if (filters.customFields) {
     const hasCustomFieldMismatch = Object.entries(filters.customFields).some(
-      ([fieldKey, fieldValue]) =>
-        typeof fieldValue === 'boolean'
-          ? (fieldValue ? String(activity.customFields?.[fieldKey] || '').toLowerCase() !== 'true' : false)
-          : fieldValue && !includesIgnoreCase(activity.customFields?.[fieldKey] || '', fieldValue)
+      ([fieldKey, fieldValue]) => {
+        if (typeof fieldValue === 'boolean') {
+          const checkboxLabel = filters.checkboxLabels?.[fieldKey]
+          const hasStoredValue = String(activity.customFields?.[fieldKey] || '').toLowerCase() === 'true'
+          const hasCommentToken = Boolean(checkboxLabel && includesIgnoreCase(activity.comments || '', `{${checkboxLabel}}`))
+          return fieldValue ? !hasStoredValue && !hasCommentToken : false
+        }
+
+        return Boolean(fieldValue && !includesIgnoreCase(activity.customFields?.[fieldKey] || '', fieldValue))
+      }
     )
 
     if (hasCustomFieldMismatch) {
@@ -289,6 +296,7 @@ function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [showUserManagement, setShowUserManagement] = useState(false)
   const [resultsPopup, setResultsPopup] = useState<ResultsPopupState | null>(null)
+  const resultsPopupRequestIdRef = useRef(0)
   const [lastSearchFilters, setLastSearchFilters] = useState<SearchFilters>({})
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === 'undefined') {
@@ -402,7 +410,7 @@ function App() {
         text: error instanceof Error ? error.message : 'Failed to refresh search activities.',
       })
     })
-  }, [appUser, currentView, effectiveActiveTeam, lastSearchFilters, runSearch, searchApplied])
+  }, [appUser, currentView, effectiveActiveTeam?.id, runSearch])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -695,9 +703,22 @@ function App() {
   const handleSearch = async (filters: SearchFilters) => {
     try {
       setLastSearchFilters(filters)
-      const results = await runSearch(filters)
+      const requestId = resultsPopupRequestIdRef.current + 1
+      resultsPopupRequestIdRef.current = requestId
 
       if (hasSearchFilters(filters)) {
+        setResultsPopup({
+          ...buildSearchResultsPopup([], filters),
+          description: 'Loading activities matching the current filters...',
+          isLoading: true,
+        })
+      } else {
+        setResultsPopup(null)
+      }
+
+      const results = await runSearch(filters)
+
+      if (hasSearchFilters(filters) && requestId === resultsPopupRequestIdRef.current) {
         setResultsPopup(buildSearchResultsPopup(results, filters))
       } else {
         setResultsPopup(null)
@@ -794,11 +815,27 @@ function App() {
   }
 
   const handleOpenDashboardResults = async (request: DashboardActivityRequest) => {
+    const requestId = resultsPopupRequestIdRef.current + 1
+    resultsPopupRequestIdRef.current = requestId
+
+    setResultsPopup({
+      title: request.title,
+      description: request.description,
+      activities: request.activities || [],
+      exportFilename: request.exportFilename || `${request.title.replace(/\s+/g, '_')}.xlsx`,
+      filter: request.filter,
+      isLoading: Boolean(request.filter),
+    })
+
     try {
       const popupActivities =
         request.filter
           ? await getActivitiesForDashboardFilter(request.filter, effectiveActiveTeam)
           : request.activities || []
+
+      if (requestId !== resultsPopupRequestIdRef.current) {
+        return
+      }
 
       setResultsPopup({
         title: request.title,
@@ -811,6 +848,13 @@ function App() {
       setMessage({
         type: 'error',
         text: error instanceof Error ? error.message : 'Failed to load dashboard activities.',
+      })
+      setResultsPopup((previous) => {
+        if (!previous || previous.filter !== request.filter) {
+          return previous
+        }
+
+        return { ...previous, isLoading: false }
       })
     }
   }
@@ -1236,7 +1280,7 @@ function App() {
           onClose={() => setResultsPopup(null)}
           onEdit={handleEditActivity}
           onDelete={handleDeleteActivity}
-          isLoading={isLoading}
+          isLoading={isLoading || Boolean(resultsPopup?.isLoading)}
           canEdit={canEditAction}
           canDelete={canDeleteAction}
           onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}

@@ -91,6 +91,11 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
         return isCustomField && (typeof value === 'boolean' ? value : Boolean(value))
       })
     ) as Record<string, string | boolean>
+    const checkboxLabels = Object.fromEntries(
+      filterableFields
+        .filter((field) => field.type === 'checkbox' && fieldValues[field.key] === true)
+        .map((field) => [field.key, field.label])
+    )
 
     const filters: SearchFilters = {
       keyword: keyword || undefined,
@@ -105,6 +110,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({ onSearch, isLoading 
       action: typeof fieldValues.action === 'string' ? fieldValues.action || undefined : undefined,
       comments: typeof fieldValues.comments === 'string' ? fieldValues.comments || undefined : undefined,
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
+      checkboxLabels: Object.keys(checkboxLabels).length > 0 ? checkboxLabels : undefined,
       hasMoc: fieldValues.mocActivity === true ? true : undefined,
     }
 

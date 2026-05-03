@@ -145,6 +145,7 @@ export interface SearchFilters {
   action?: string
   comments?: string
   customFields?: Record<string, string | boolean>
+  checkboxLabels?: Record<string, string>
   keyword?: string
   hasMoc?: boolean
 }
@@ -232,6 +233,8 @@ export interface TeamManagedUser extends AdminManagedUser {
   team_ids: string[]
   team_roles: Record<string, UserRole>
 }
+
+let reusableEditorCatalogCache: { value: ReusableEditorCatalogs; expiresAt: number } | null = null
 
 type TeamRow = {
   id: string
@@ -874,17 +877,23 @@ function matchesSearchFilters(filters: SearchFilters) {
 }
 
 const ACTIVITY_FETCH_BATCH_SIZE = 1000
+const SEARCH_ACTIVITY_RESULT_LIMIT = 500
 const FULL_ACTIVITY_SELECT_COLUMNS =
   'id,date,performer,system,shift,permit_number,instrument_type,activityType,tag,problem,action,comments,custom_fields,editedBy,created_at,edited_at'
 const DASHBOARD_ACTIVITY_SELECT_COLUMNS =
   'date,performer,system,shift,instrument_type,activityType,tag,custom_fields,editedBy,created_at,edited_at'
 
-async function fetchAllActivitiesBatched(buildQuery: () => any) {
+async function fetchAllActivitiesBatched(buildQuery: () => any, maxRows = Number.POSITIVE_INFINITY) {
   let offset = 0
   const rows: Array<Partial<Activity>> = []
 
   while (true) {
-    const { data, error } = await buildQuery().range(offset, offset + ACTIVITY_FETCH_BATCH_SIZE - 1)
+    const batchSize = Math.min(ACTIVITY_FETCH_BATCH_SIZE, maxRows - rows.length)
+    if (batchSize <= 0) {
+      break
+    }
+
+    const { data, error } = await buildQuery().range(offset, offset + batchSize - 1)
 
     if (error) {
       throw error
@@ -893,14 +902,28 @@ async function fetchAllActivitiesBatched(buildQuery: () => any) {
     const batch = (data || []) as Array<Partial<Activity>>
     rows.push(...batch)
 
-    if (batch.length < ACTIVITY_FETCH_BATCH_SIZE) {
+    if (batch.length < batchSize || rows.length >= maxRows) {
       break
     }
 
-    offset += ACTIVITY_FETCH_BATCH_SIZE
+    offset += batchSize
   }
 
   return rows
+}
+
+function escapePostgrestFilterValue(value: string) {
+  return value.replace(/[%*,()]/g, '\\$&')
+}
+
+function hasCommentCheckboxToken(comments: string | undefined | null, label: string) {
+  const normalizedLabel = label.trim().toLowerCase()
+  if (!normalizedLabel) {
+    return false
+  }
+
+  const normalizedComments = String(comments || '').toLowerCase()
+  return normalizedComments.includes(`{${normalizedLabel}}`)
 }
 
 export async function getCurrentUserProfile() {
@@ -1407,6 +1430,7 @@ export async function updateSettings(settings: Partial<Settings>, userId: string
     }
 
     if (error) throw error
+    reusableEditorCatalogCache = null
     return {
       ...DEFAULT_SETTINGS,
       ...(data as Settings),
@@ -1502,6 +1526,11 @@ export async function getManagedTeams(): Promise<ManagedTeam[]> {
 }
 
 export async function getReusableEditorCatalogs(): Promise<ReusableEditorCatalogs> {
+  const now = Date.now()
+  if (reusableEditorCatalogCache && reusableEditorCatalogCache.expiresAt > now) {
+    return reusableEditorCatalogCache.value
+  }
+
   const { data, error } = await supabase
     .from('team_settings')
     .select('activity_field_definitions, dashboard_chart_definitions, dashboard_card_definitions')
@@ -1586,11 +1615,17 @@ export async function getReusableEditorCatalogs(): Promise<ReusableEditorCatalog
     })
   })
 
-  return {
+  const catalogs = {
     fields: Array.from(fieldMap.values()),
     charts: Array.from(chartMap.values()),
     cards: Array.from(cardMap.values()),
   }
+  reusableEditorCatalogCache = {
+    value: catalogs,
+    expiresAt: now + 60_000,
+  }
+
+  return catalogs
 }
 
 function slugifyTeamName(name: string) {
@@ -1955,10 +1990,41 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
       query = query.ilike('comments', '%{MOC}%')
     }
 
+    if (filters.checkboxLabels) {
+      Object.entries(filters.checkboxLabels).forEach(([fieldKey, label]) => {
+        if (fieldKey !== 'mocActivity' && label) {
+          query = query.ilike('comments', `%{${label}}%`)
+        }
+      })
+    }
+
+    if (filters.keyword) {
+      const keyword = escapePostgrestFilterValue(filters.keyword.trim())
+      if (keyword) {
+        const keywordPattern = `*${keyword}*`
+        query = query.or(
+          [
+            `date.ilike.${keywordPattern}`,
+            `performer.ilike.${keywordPattern}`,
+            `system.ilike.${keywordPattern}`,
+            `shift.ilike.${keywordPattern}`,
+            `permit_number.ilike.${keywordPattern}`,
+            `instrument_type.ilike.${keywordPattern}`,
+            `activityType.ilike.${keywordPattern}`,
+            `tag.ilike.${keywordPattern}`,
+            `problem.ilike.${keywordPattern}`,
+            `action.ilike.${keywordPattern}`,
+            `comments.ilike.${keywordPattern}`,
+          ].join(',')
+        )
+      }
+    }
+
     const data = await fetchAllActivitiesBatched(() =>
       query
         .order('date', { ascending: false })
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }),
+      SEARCH_ACTIVITY_RESULT_LIMIT
     )
 
     let results = (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))
@@ -1969,7 +2035,10 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
           const activityValue = String(activity.customFields?.[fieldKey] || '')
 
           if (typeof value === 'boolean') {
-            return value ? activityValue.toLowerCase() === 'true' : !activityValue
+            const checkboxLabel = filters.checkboxLabels?.[fieldKey]
+            return value
+              ? activityValue.toLowerCase() === 'true' || Boolean(checkboxLabel && hasCommentCheckboxToken(activity.comments, checkboxLabel))
+              : !activityValue
           }
 
           return activityValue.toLowerCase().includes(String(value || '').toLowerCase())

@@ -18,4 +18,22 @@ describe('comments prefixes utilities', () => {
 
     expect(result).toBe('{MOC} [Ali Hassan] Replaced sensor and validated range')
   })
+
+  it('parses custom checkbox prefixes from comments', () => {
+    const parsed = parseCommentPrefixes('{MOC} {PAO} {Safety Review} Checked loop')
+
+    expect(parsed.hasMoc).toBe(true)
+    expect(parsed.checkboxLabels).toEqual(['PAO', 'Safety Review'])
+    expect(parsed.commentBody).toBe('Checked loop')
+  })
+
+  it('deduplicates custom checkbox prefixes case-insensitively', () => {
+    const result = buildCommentWithPrefixes({
+      hasMoc: false,
+      checkboxLabels: ['PAO', 'pao', 'Safety Review'],
+      comment: 'Done',
+    })
+
+    expect(result).toBe('{PAO} {Safety Review} Done')
+  })
 })

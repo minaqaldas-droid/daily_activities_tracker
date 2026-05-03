@@ -530,7 +530,7 @@ function FieldsEditor({
                           archived: false,
                         })
                       }
-                      disabled={isBusy || field.key === 'mocActivity'}
+                      disabled={isBusy || field.key === 'mocActivity' || field.key === 'performer'}
                     >
                       <option value="text">Text</option>
                       <option value="textarea">Textarea</option>

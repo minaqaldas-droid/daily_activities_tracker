@@ -65,8 +65,8 @@ const BASE_ACTIVITY_FIELD_DEFINITIONS: ActivityFieldDefinition[] = [
   {
     key: 'performer',
     label: 'Performer',
-    placeholder: 'Select Performer',
-    type: 'select',
+    placeholder: 'Enter performer',
+    type: 'text',
     defaultEnabled: true,
     defaultRequired: true,
     defaultOrder: 20,
@@ -129,7 +129,7 @@ const BASE_ACTIVITY_FIELD_DEFINITIONS: ActivityFieldDefinition[] = [
   },
   {
     key: 'mocActivity',
-    label: 'MOC Activity',
+    label: 'MOC',
     placeholder: 'Prefixes comments with {MOC} when selected',
     type: 'checkbox',
     defaultEnabled: true,
@@ -280,8 +280,8 @@ export function getActivityFieldDefinitions(settings?: Settings | null) {
       ...field,
       label: override?.label || field.label,
       placeholder: override?.placeholder || field.placeholder,
-      type: override?.type || field.type,
-      options: override?.type === 'select' ? override.options || field.options || [] : field.options,
+      type: field.key === 'performer' ? 'text' : override?.type || field.type,
+      options: field.key === 'performer' ? [] : override?.type === 'select' ? override.options || field.options || [] : field.options,
       searchable: override?.searchable ?? field.searchable,
       tableBadge: override?.tableBadge ?? field.tableBadge,
     })
