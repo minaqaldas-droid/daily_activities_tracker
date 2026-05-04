@@ -173,7 +173,7 @@ function EditorModal({
             <p className="form-hint admin-editor-header-copy">{description}</p>
           </div>
           <button className="modal-close" onClick={onClose} type="button">
-            X
+            ×
           </button>
         </div>
 
@@ -2177,13 +2177,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="modal-header">
             <h2>Admin Settings</h2>
             <button className="modal-close" onClick={onClose} type="button">
-              X
+              ×
             </button>
           </div>
           <div className="permission-notice">
             <p>Only Admin and Super Admin users can manage dynamic fields, charts, cards, and team layout settings.</p>
             <button type="button" className="btn btn-secondary" onClick={onClose}>
-              X
+              ×
             </button>
           </div>
         </div>
@@ -2203,7 +2203,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </p>
             </div>
             <button className="modal-close" onClick={onClose} type="button">
-              X
+              ×
             </button>
           </div>
 

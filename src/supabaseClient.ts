@@ -890,7 +890,6 @@ function matchesSearchFilters(filters: SearchFilters) {
 }
 
 const ACTIVITY_FETCH_BATCH_SIZE = 1000
-const SEARCH_ACTIVITY_RESULT_LIMIT = 500
 const FULL_ACTIVITY_SELECT_COLUMNS =
   'id,date,performer,system,shift,permit_number,instrument_type,activityType,tag,problem,action,comments,custom_fields,editedBy,created_at,edited_at'
 const DASHBOARD_ACTIVITY_SELECT_COLUMNS =
@@ -2010,8 +2009,7 @@ export async function searchActivities(filters: SearchFilters, team?: Team | nul
     const data = await fetchAllActivitiesBatched(() =>
       query
         .order('date', { ascending: false })
-        .order('created_at', { ascending: false }),
-      SEARCH_ACTIVITY_RESULT_LIMIT
+        .order('created_at', { ascending: false })
     )
 
     let results = (data || []).map((activity) => normalizeActivity(activity as Partial<Activity>))

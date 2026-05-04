@@ -597,7 +597,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ curren
             Save Settings
           </button>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            X
+            Close
           </button>
         </div>
       </div>

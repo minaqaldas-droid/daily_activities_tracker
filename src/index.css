@@ -2189,7 +2189,7 @@ body.modal-open {
 
 .sidebar-mini-toggle {
   width: 28px;
-  height: 14px;
+  height: 20px;
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.12);
@@ -6918,4 +6918,301 @@ body.modal-open .back-to-top-button {
 .activities-table td.col-actions {
   width: 148px !important;
   white-space: nowrap !important;
+}
+
+/* Responsive Shell Consolidation */
+:root {
+  --sidebar-width-collapsed: clamp(62px, 6.5vw, 72px);
+  --sidebar-width-expanded: clamp(188px, 19vw, 240px);
+}
+
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body.app-shell-active {
+  width: 100%;
+}
+
+.app-layout {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
+}
+
+.sidebar,
+.sidebar * {
+  min-width: 0;
+}
+
+.sidebar.expanded .user-info,
+.sidebar.expanded .nav-text,
+.sidebar.expanded .nav-badge,
+.sidebar-team-name,
+.sidebar-team-option-copy {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sidebar.expanded .user-name,
+.sidebar.expanded .user-email,
+.sidebar.expanded .nav-text,
+.sidebar.expanded .nav-badge {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.expanded .nav-item,
+.sidebar.expanded .sidebar-toggle-btn,
+.sidebar.expanded .logout-btn {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: stretch;
+}
+
+.main-content {
+  margin-left: var(--sidebar-width);
+  width: calc(100vw - var(--sidebar-width));
+  max-width: calc(100vw - var(--sidebar-width));
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.main-content-shell,
+.content-wrapper,
+.dashboard,
+.dashboard-section-main,
+.dashboard-section,
+.form-section,
+.list-section,
+.search-section,
+.search-filter,
+.search-card,
+.results-popup-modal,
+.settings-modal,
+.admin-editor-modal,
+.user-management-modal,
+.account-settings-modal,
+.table-container,
+.chart-container,
+.chart-list,
+.chart-legend,
+.stats-grid {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-chart-grid,
+.stats-grid,
+.search-layout,
+.search-grid,
+.activity-main-grid,
+.form-row,
+.form-row-two-up,
+.form-row-three-up,
+.rbac-checkbox-grid,
+.team-checkbox-grid {
+  min-width: 0;
+}
+
+.dashboard-chart-card,
+.stat-card,
+.chart-item,
+.legend-item,
+.form-group,
+.activity-action-buttons,
+.results-popup-toolbar,
+.modal-actions,
+.search-actions {
+  min-width: 0;
+}
+
+.table-container,
+.excel-template-hint,
+.user-management-modal .table-container,
+.results-popup-body > .table-container {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.activities-table,
+.template-table {
+  min-width: 100%;
+}
+
+.results-popup-modal,
+.settings-modal,
+.admin-settings-modal,
+.user-management-modal,
+.account-settings-modal {
+  width: min(100% - 32px, var(--modal-max-width, 1180px));
+  max-width: calc(100vw - 32px);
+}
+
+.admin-settings-modal,
+.user-management-modal {
+  --modal-max-width: 1320px;
+}
+
+.results-popup-modal {
+  --modal-max-width: 1480px;
+}
+
+.chart-label,
+.legend-label,
+.stat-content,
+.results-popup-header-copy,
+.search-card-header,
+.dashboard-section-title {
+  min-width: 0;
+}
+
+.chart-label,
+.legend-label,
+.results-popup-description,
+.search-card-header p,
+.search-results-count {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1280px) {
+  :root {
+    --sidebar-width-collapsed: clamp(88px, 7.5vw, 104px);
+    --sidebar-width-expanded: clamp(264px, 24vw, 312px);
+  }
+
+  .dashboard-chart-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)) !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --sidebar-width-collapsed: clamp(84px, 8.5vw, 96px);
+    --sidebar-width-expanded: clamp(248px, 28vw, 288px);
+  }
+
+  .main-content {
+    padding-inline: clamp(12px, 1.8vw, 18px);
+  }
+
+  .search-layout,
+  .activity-main-grid,
+  .form-row-three-up {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width-collapsed: 0px;
+    --sidebar-width-expanded: 0px;
+  }
+
+  .app-layout,
+  .app-layout.sidebar-expanded {
+    --sidebar-width: 0px;
+  }
+
+  .sidebar,
+  .sidebar.expanded {
+    width: min(88vw, 320px);
+    min-width: 0;
+    max-width: min(88vw, 320px);
+  }
+
+  .main-content {
+    margin-left: 0;
+    width: 100vw;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .dashboard-chart-grid,
+  .stats-grid,
+  .search-layout,
+  .search-grid,
+  .activity-main-grid,
+  .form-row,
+  .form-row-two-up,
+  .form-row-three-up {
+    grid-template-columns: 1fr !important;
+  }
+
+  .results-popup-modal,
+  .settings-modal,
+  .admin-settings-modal,
+  .user-management-modal,
+  .account-settings-modal {
+    width: min(100vw - 16px, 100%);
+    max-width: calc(100vw - 16px);
+  }
+}
+
+/* Chart Legend Value Wrapping */
+.legend-item {
+  container-type: inline-size;
+}
+
+.legend-value-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  min-width: max-content;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.legend-value-count,
+.legend-value-percent {
+  display: inline-block;
+}
+
+@container (max-width: 230px) {
+  .legend-value-button {
+    flex-direction: column;
+    gap: 3px;
+    min-width: 76px;
+    white-space: normal;
+  }
+}
+
+@container (max-width: 190px) {
+  .legend-item {
+    gap: 8px;
+  }
+
+  .legend-value-button {
+    min-width: 68px;
+    padding-inline: 10px;
+  }
+}
+
+.system-chart-card .legend-value-button {
+  white-space: nowrap;
+}
+
+@container (max-width: 230px) {
+  .system-chart-card .legend-value-button {
+    white-space: normal;
+  }
 }

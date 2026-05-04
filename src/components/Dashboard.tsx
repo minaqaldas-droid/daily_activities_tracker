@@ -209,7 +209,8 @@ function PieChartCard({
                   <span className="legend-color" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></span>
                   <span className="legend-label">{item.label}</span>
                   <button type="button" className="legend-value-button" onClick={() => onValueSelect?.(item)} disabled={!onValueSelect}>
-                    {item.value} ({percentage}%)
+                    <span className="legend-value-count">{item.value}</span>
+                    <span className="legend-value-percent">({percentage}%)</span>
                   </button>
                 </div>
               )
