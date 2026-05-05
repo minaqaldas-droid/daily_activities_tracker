@@ -314,6 +314,12 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
     if (field.type === 'checkbox') {
       const checked = value.toLowerCase() === 'true'
+      const checkboxPrefixHint =
+        field.key === 'mocActivity'
+          ? <>When checked, comments are prefixed with <code>{'{MOC}'}</code>.</>
+          : <>When checked, comments are prefixed with <code>{`{${field.label}}`}</code>.</>
+      const placeholderText = field.placeholder?.trim()
+
       return (
         <div className="form-group form-group-inline-checkbox" key={field.key}>
           <div className="moc-inline-control">
@@ -330,11 +336,10 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
               required={required && !checked}
             />
           </div>
-          <small className="form-hint">
-            {field.key === 'mocActivity'
-              ? <>When checked, comments are prefixed with <code>{'{MOC}'}</code>.</>
-              : <>When checked, comments are prefixed with <code>{`{${field.label}}`}</code>.</>}
-          </small>
+          {placeholderText && placeholderText !== field.label ? (
+            <small className="form-hint checkbox-placeholder-hint">{placeholderText}</small>
+          ) : null}
+          <small className="form-hint checkbox-prefix-hint">{checkboxPrefixHint}</small>
         </div>
       )
     }
