@@ -3542,6 +3542,42 @@ body.modal-open {
   min-height: 48px;
 }
 
+.admin-email-summary-toggle {
+  align-items: flex-start;
+}
+
+.admin-email-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.admin-email-summary-toggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-email-summary-toggle strong {
+  color: #0f172a;
+}
+
+.admin-email-summary-toggle small {
+  color: #64748b;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.admin-email-time-control {
+  justify-content: center;
+  min-width: 0;
+}
+
+.admin-email-time-control input[type="time"] {
+  min-height: 48px;
+}
+
 .admin-entity-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3652,6 +3688,7 @@ body.modal-open {
   }
 
   .editor-launch-grid,
+  .admin-email-summary-grid,
   .admin-layout-stack,
   .admin-layout-grid,
   .admin-editor-main {

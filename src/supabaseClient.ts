@@ -127,6 +127,8 @@ export interface Settings {
   dashboard_card_config?: DashboardCardConfig
   dashboard_card_definitions?: StoredDashboardCardDefinition[]
   layout_config?: LayoutConfig
+  daily_activity_email_enabled?: boolean
+  daily_activity_email_time?: string
   updated_at?: string
   updated_by?: string
 }
@@ -273,6 +275,8 @@ const DEFAULT_SETTINGS: Settings = {
   dashboard_card_config: DEFAULT_DASHBOARD_CARD_CONFIG,
   dashboard_card_definitions: DEFAULT_DASHBOARD_CARD_DEFINITIONS,
   layout_config: DEFAULT_LAYOUT_CONFIG,
+  daily_activity_email_enabled: true,
+  daily_activity_email_time: '17:00',
 }
 
 function getArchivedCoreActivityFieldSettings(): StoredActivityFieldDefinition[] {
@@ -337,6 +341,11 @@ function isMissingColumnError(error: unknown, columnName: string) {
       maybeError?.code === 'PGRST204' ||
       message.toLowerCase().includes(columnName.toLowerCase())
   )
+}
+
+function omitKeys<T extends Record<string, unknown>>(value: T, keys: string[]) {
+  const excludedKeys = new Set(keys)
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !excludedKeys.has(key)))
 }
 
 function getUnknownErrorMessage(error: unknown) {
@@ -1400,16 +1409,10 @@ export async function updateSettings(settings: Partial<Settings>, userId: string
 
     if (existingSettingsError) throw existingSettingsError
 
-    const buildPayload = (includeMocVisibility: boolean) => {
-      const baseDefaults = includeMocVisibility
-        ? DEFAULT_SETTINGS
-        : Object.fromEntries(Object.entries(DEFAULT_SETTINGS).filter(([key]) => key !== 'show_moc_activity'))
-      const mergedExistingSettings = includeMocVisibility
-        ? existingSettings || {}
-        : Object.fromEntries(Object.entries(existingSettings || {}).filter(([key]) => key !== 'show_moc_activity'))
-      const mergedIncomingSettings = includeMocVisibility
-        ? settings
-        : Object.fromEntries(Object.entries(settings).filter(([key]) => key !== 'show_moc_activity'))
+    const buildPayload = (excludedColumns: string[] = []) => {
+      const baseDefaults = omitKeys(DEFAULT_SETTINGS as unknown as Record<string, unknown>, excludedColumns)
+      const mergedExistingSettings = omitKeys((existingSettings || {}) as Record<string, unknown>, excludedColumns)
+      const mergedIncomingSettings = omitKeys(settings as Record<string, unknown>, excludedColumns)
 
       return {
         ...baseDefaults,
@@ -1421,18 +1424,42 @@ export async function updateSettings(settings: Partial<Settings>, userId: string
       }
     }
 
+    const excludedColumns: string[] = []
     let retriedWithoutMocVisibility = false
+    let retriedWithoutDailyEmailEnabled = false
+    let retriedWithoutDailyEmailTime = false
     let { data, error } = await supabase
       .from('team_settings')
-      .upsert([buildPayload(true)], { onConflict: 'team_id' })
+      .upsert([buildPayload(excludedColumns)], { onConflict: 'team_id' })
       .select()
       .single()
 
     if (error && isMissingColumnError(error, 'show_moc_activity')) {
       retriedWithoutMocVisibility = true
+      excludedColumns.push('show_moc_activity')
       ;({ data, error } = await supabase
         .from('team_settings')
-        .upsert([buildPayload(false)], { onConflict: 'team_id' })
+        .upsert([buildPayload(excludedColumns)], { onConflict: 'team_id' })
+        .select()
+        .single())
+    }
+
+    if (error && isMissingColumnError(error, 'daily_activity_email_enabled')) {
+      retriedWithoutDailyEmailEnabled = true
+      excludedColumns.push('daily_activity_email_enabled')
+      ;({ data, error } = await supabase
+        .from('team_settings')
+        .upsert([buildPayload(excludedColumns)], { onConflict: 'team_id' })
+        .select()
+        .single())
+    }
+
+    if (error && isMissingColumnError(error, 'daily_activity_email_time')) {
+      retriedWithoutDailyEmailTime = true
+      excludedColumns.push('daily_activity_email_time')
+      ;({ data, error } = await supabase
+        .from('team_settings')
+        .upsert([buildPayload(excludedColumns)], { onConflict: 'team_id' })
         .select()
         .single())
     }
@@ -1446,6 +1473,16 @@ export async function updateSettings(settings: Partial<Settings>, userId: string
         retriedWithoutMocVisibility || !('show_moc_activity' in (data || {}))
           ? settings.show_moc_activity ?? existingSettings?.show_moc_activity ?? DEFAULT_SETTINGS.show_moc_activity
           : (data as Settings).show_moc_activity,
+      daily_activity_email_enabled:
+        retriedWithoutDailyEmailEnabled || !('daily_activity_email_enabled' in (data || {}))
+          ? settings.daily_activity_email_enabled ??
+            existingSettings?.daily_activity_email_enabled ??
+            DEFAULT_SETTINGS.daily_activity_email_enabled
+          : (data as Settings).daily_activity_email_enabled,
+      daily_activity_email_time:
+        retriedWithoutDailyEmailTime || !('daily_activity_email_time' in (data || {}))
+          ? settings.daily_activity_email_time ?? existingSettings?.daily_activity_email_time ?? DEFAULT_SETTINGS.daily_activity_email_time
+          : (data as Settings).daily_activity_email_time,
     } as Settings
   } catch (error) {
     console.error('Error updating settings:', error)
@@ -1664,23 +1701,41 @@ export async function createManagedTeam(input: { name: string; slug?: string }) 
 
   const initialTeamSettings = getEmptyDynamicTeamSettings(data.name)
 
-  const buildInitialTeamSettingsPayload = (includeMocVisibility: boolean) => ({
-    team_id: data.id,
-    webapp_name: initialTeamSettings.webapp_name,
-    browser_tab_name: initialTeamSettings.browser_tab_name,
-    ...(includeMocVisibility ? { show_moc_activity: false } : {}),
-    activity_field_definitions: initialTeamSettings.activity_field_definitions,
-    activity_field_config: initialTeamSettings.activity_field_config,
-    dashboard_chart_definitions: initialTeamSettings.dashboard_chart_definitions,
-    dashboard_chart_config: initialTeamSettings.dashboard_chart_config,
-    dashboard_card_definitions: initialTeamSettings.dashboard_card_definitions,
-    dashboard_card_config: initialTeamSettings.dashboard_card_config,
-  })
+  const buildInitialTeamSettingsPayload = (excludedColumns: string[] = []) =>
+    omitKeys(
+      {
+        team_id: data.id,
+        webapp_name: initialTeamSettings.webapp_name,
+        browser_tab_name: initialTeamSettings.browser_tab_name,
+        show_moc_activity: false,
+        daily_activity_email_enabled: initialTeamSettings.daily_activity_email_enabled ?? true,
+        daily_activity_email_time: initialTeamSettings.daily_activity_email_time ?? '17:00',
+        activity_field_definitions: initialTeamSettings.activity_field_definitions,
+        activity_field_config: initialTeamSettings.activity_field_config,
+        dashboard_chart_definitions: initialTeamSettings.dashboard_chart_definitions,
+        dashboard_chart_config: initialTeamSettings.dashboard_chart_config,
+        dashboard_card_definitions: initialTeamSettings.dashboard_card_definitions,
+        dashboard_card_config: initialTeamSettings.dashboard_card_config,
+      },
+      excludedColumns
+    )
 
-  let { error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(true)])
+  const excludedSettingsColumns: string[] = []
+  let { error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(excludedSettingsColumns)])
 
   if (settingsInsertError && isMissingColumnError(settingsInsertError, 'show_moc_activity')) {
-    ;({ error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(false)]))
+    excludedSettingsColumns.push('show_moc_activity')
+    ;({ error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(excludedSettingsColumns)]))
+  }
+
+  if (settingsInsertError && isMissingColumnError(settingsInsertError, 'daily_activity_email_enabled')) {
+    excludedSettingsColumns.push('daily_activity_email_enabled')
+    ;({ error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(excludedSettingsColumns)]))
+  }
+
+  if (settingsInsertError && isMissingColumnError(settingsInsertError, 'daily_activity_email_time')) {
+    excludedSettingsColumns.push('daily_activity_email_time')
+    ;({ error: settingsInsertError } = await supabase.from('team_settings').insert([buildInitialTeamSettingsPayload(excludedSettingsColumns)]))
   }
 
   if (settingsInsertError) {

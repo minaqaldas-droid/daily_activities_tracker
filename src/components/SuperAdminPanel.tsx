@@ -44,9 +44,14 @@ const CORE_CHART_KEYS = new Set(['activityType', 'performer', 'system', 'shift',
 const CORE_CARD_KEYS = new Set(['totalActivities', 'myActivities', 'thisWeekActivities', 'recentlyEdited'])
 const DEFAULT_CARD_ICON = '*'
 const CHART_ITEM_LIMIT_OPTIONS = [4, 6, 8, 10, 20, 30, 50, 100]
+const DEFAULT_DAILY_ACTIVITY_EMAIL_TIME = '17:00'
 
 function isValidImageFile(file: File) {
   return ACCEPTED_IMAGE_TYPES.includes(file.type) && file.size <= MAX_FILE_SIZE
+}
+
+function normalizeDailyEmailTime(value: string | undefined) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value || '') ? value || DEFAULT_DAILY_ACTIVITY_EMAIL_TIME : DEFAULT_DAILY_ACTIVITY_EMAIL_TIME
 }
 
 function normalizeSequentialFieldOrder(settings: Settings, fieldDefinitions: StoredActivityFieldDefinition[], fieldConfig: ActivityFieldConfig) {
@@ -1863,6 +1868,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [browserTabName, setBrowserTabName] = useState('')
   const [performerMode, setPerformerMode] = useState<'manual' | 'auto'>('manual')
   const [showMocActivity, setShowMocActivity] = useState(true)
+  const [dailyActivityEmailEnabled, setDailyActivityEmailEnabled] = useState(true)
+  const [dailyActivityEmailTime, setDailyActivityEmailTime] = useState(DEFAULT_DAILY_ACTIVITY_EMAIL_TIME)
   const [headerFontFamily, setHeaderFontFamily] = useState('')
   const [subheaderFontFamily, setSubheaderFontFamily] = useState('')
   const [sidebarFontFamily, setSidebarFontFamily] = useState('')
@@ -1923,6 +1930,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setBrowserTabName(currentSettings.browser_tab_name || currentSettings.webapp_name || 'Daily Activities Tracker')
     setPerformerMode(currentSettings.performer_mode || 'manual')
     setShowMocActivity(currentSettings.show_moc_activity !== false)
+    setDailyActivityEmailEnabled(currentSettings.daily_activity_email_enabled !== false)
+    setDailyActivityEmailTime(normalizeDailyEmailTime(currentSettings.daily_activity_email_time))
     setHeaderFontFamily(currentSettings.header_font_family || '')
     setSubheaderFontFamily(currentSettings.subheader_font_family || '')
     setSidebarFontFamily(currentSettings.sidebar_font_family || '')
@@ -2002,8 +2011,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       dashboard_card_definitions: cardDefinitions,
       dashboard_card_config: cardConfig,
       layout_config: layoutConfig,
+      daily_activity_email_enabled: dailyActivityEmailEnabled,
+      daily_activity_email_time: dailyActivityEmailTime,
     }),
-    [cardConfig, cardDefinitions, chartConfig, chartDefinitions, currentSettings, fieldConfig, fieldDefinitions, layoutConfig]
+    [
+      cardConfig,
+      cardDefinitions,
+      chartConfig,
+      chartDefinitions,
+      currentSettings,
+      dailyActivityEmailEnabled,
+      dailyActivityEmailTime,
+      fieldConfig,
+      fieldDefinitions,
+      layoutConfig,
+    ]
   )
 
   const orderedFields = getOrderedActivityFields(effectiveSettings)
@@ -2079,6 +2101,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           : faviconPreview || logoPreview || currentSettings.favicon_url || currentSettings.logo_url || '',
         performer_mode: performerMode,
         show_moc_activity: resolvedShowMocActivity,
+        daily_activity_email_enabled: dailyActivityEmailEnabled,
+        daily_activity_email_time: dailyActivityEmailTime,
         header_font_family: headerFontFamily.trim(),
         subheader_font_family: subheaderFontFamily.trim(),
         sidebar_font_family: sidebarFontFamily.trim(),
@@ -2144,6 +2168,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           favicon_url: nextFaviconUrl,
           performer_mode: performerMode,
           show_moc_activity: normalizedShowMocActivity,
+          daily_activity_email_enabled: dailyActivityEmailEnabled,
+          daily_activity_email_time: dailyActivityEmailTime,
           header_font_family: headerFontFamily.trim(),
           subheader_font_family: subheaderFontFamily.trim(),
           sidebar_font_family: sidebarFontFamily.trim(),
@@ -2312,6 +2338,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   />
                 </div>
               </div>
+            </SectionCard>
+
+            <SectionCard title="Daily Email Summary">
+              <div className="admin-email-summary-grid">
+                <label className="admin-inline-toggle admin-inline-toggle-block admin-email-summary-toggle">
+                  <input
+                    type="checkbox"
+                    checked={dailyActivityEmailEnabled}
+                    onChange={(event) => setDailyActivityEmailEnabled(event.target.checked)}
+                    disabled={isSubmitting || isLoading}
+                  />
+                  <span>
+                    <strong>Send daily activity summary emails</strong>
+                    <small>
+                      When enabled, the scheduled email function sends this team&apos;s activities added during the day to approved team users.
+                    </small>
+                  </span>
+                </label>
+                <div className="form-group admin-email-time-control">
+                  <label htmlFor="daily-activity-email-time">Send Time</label>
+                  <input
+                    id="daily-activity-email-time"
+                    type="time"
+                    value={dailyActivityEmailTime}
+                    onChange={(event) => setDailyActivityEmailTime(normalizeDailyEmailTime(event.target.value))}
+                    disabled={isSubmitting || isLoading || !dailyActivityEmailEnabled}
+                  />
+                  <small>Cairo time, 24-hour format.</small>
+                </div>
+              </div>
+              <p className="form-hint">
+                The schedule and sender are controlled by Supabase secrets and the cron job. This switch only controls whether
+                {activeTeam?.name ? ` ${activeTeam.name}` : ' this team'} is included and when it becomes due.
+              </p>
             </SectionCard>
 
             <SectionCard title="Dynamic Editors">
