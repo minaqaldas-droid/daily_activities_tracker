@@ -601,26 +601,20 @@ function getPendingApprovalMessage() {
 }
 
 async function notifyAdminAboutSignup(payload: { id: string; email: string; name: string }) {
-  const webhookUrl = (import.meta.env.VITE_ADMIN_APPROVAL_WEBHOOK_URL || '').trim()
-
-  if (!webhookUrl) {
-    return false
-  }
-
   try {
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const { error } = await supabase.functions.invoke('new-user-signup-notification', {
+      body: {
         type: 'new_user_signup',
         occurred_at: new Date().toISOString(),
         user: payload,
-      }),
+      },
     })
 
-    return response.ok
+    if (error) {
+      throw error
+    }
+
+    return true
   } catch (error) {
     console.warn('Failed to notify admin about signup request:', error)
     return false

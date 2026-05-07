@@ -51,6 +51,15 @@ type StoredActivityFieldDefinition = {
 
 type ActivityFieldConfig = Record<string, { enabled: boolean; order: number }>
 
+type EmailActivityWindow = {
+  summaryDate: string
+  displaySummaryDate: string
+  startUtc: string
+  endUtc: string
+  startDisplay: string
+  endDisplay: string
+}
+
 type MembershipRow = {
   users: {
     email: string
@@ -123,6 +132,20 @@ function formatDisplayDate(value: string) {
   }).format(new Date(Date.UTC(year, month - 1, day)))
 
   return `${String(day).padStart(2, '0')}-${monthName}-${year}`
+}
+
+function formatDisplayDateTime(date: Date) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Cairo',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+    .format(date)
+    .replace(',', '')
 }
 
 function normalizeFieldKey(value: string) {
@@ -372,6 +395,29 @@ function getUtcInstantForTimeZoneDateTime(
   return new Date(utc)
 }
 
+function getTeamActivityWindow(now: Date, scheduledTime: { value: string; minutes: number }): EmailActivityWindow {
+  const cairoDate = getCairoDateParts(now)
+  const [hour, minute] = scheduledTime.value.split(':').map(Number)
+  const scheduledEnd = getUtcInstantForTimeZoneDateTime('Africa/Cairo', {
+    year: Number(cairoDate.year),
+    month: Number(cairoDate.month),
+    day: Number(cairoDate.day),
+    hour,
+    minute,
+    second: 0,
+  })
+  const scheduledStart = new Date(scheduledEnd.getTime() - 24 * 60 * 60 * 1000)
+
+  return {
+    summaryDate: cairoDate.isoDate,
+    displaySummaryDate: formatDisplayDate(cairoDate.isoDate),
+    startUtc: scheduledStart.toISOString(),
+    endUtc: scheduledEnd.toISOString(),
+    startDisplay: `${formatDisplayDateTime(scheduledStart)} Cairo`,
+    endDisplay: `${formatDisplayDateTime(scheduledEnd)} Cairo`,
+  }
+}
+
 function getCairoDayUtcRange(summaryDate: string) {
   const [year, month, day] = summaryDate.split('-').map(Number)
   const start = getUtcInstantForTimeZoneDateTime('Africa/Cairo', {
@@ -453,8 +499,7 @@ function getActivityFieldValue(activity: ActivityRow, field: ActivityFieldDefini
   }
 }
 
-function buildHtmlEmail(team: TeamRow, summaryDate: string, activities: ActivityRow[], fields: ActivityFieldDefinition[]) {
-  const displaySummaryDate = formatDisplayDate(summaryDate)
+function buildHtmlEmail(team: TeamRow, window: EmailActivityWindow, activities: ActivityRow[], fields: ActivityFieldDefinition[]) {
   const rows = activities
     .map((activity) => {
       return `
@@ -465,7 +510,7 @@ function buildHtmlEmail(team: TeamRow, summaryDate: string, activities: Activity
     })
     .join('')
 
-  const emptyState = activities.length === 0 ? '<p>No activities were added for this team today.</p>' : ''
+  const emptyState = activities.length === 0 ? '<p>No activities were added for this team during this 24-hour period.</p>' : ''
 
   return `
     <!doctype html>
@@ -474,10 +519,13 @@ function buildHtmlEmail(team: TeamRow, summaryDate: string, activities: Activity
         <main style="max-width:1200px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
           <header style="padding:20px 24px;background:#1d4ed8;color:#ffffff;">
             <h1 style="margin:0;font-size:22px;">Daily Activities Summary</h1>
-            <p style="margin:8px 0 0;">${escapeHtml(team.name)} - ${escapeHtml(displaySummaryDate)}</p>
+            <p style="margin:8px 0 0;">${escapeHtml(team.name)} - ${escapeHtml(window.displaySummaryDate)}</p>
           </header>
           <section style="padding:20px 24px;">
             <p style="margin:0 0 16px;"><strong>Total activities:</strong> ${activities.length}</p>
+            <p style="margin:0 0 16px;color:#475569;">
+              <strong>Included period:</strong> ${escapeHtml(window.startDisplay)} to ${escapeHtml(window.endDisplay)}
+            </p>
             ${emptyState}
             ${
               activities.length > 0
@@ -506,16 +554,17 @@ function buildHtmlEmail(team: TeamRow, summaryDate: string, activities: Activity
   `
 }
 
-function buildTextEmail(team: TeamRow, summaryDate: string, activities: ActivityRow[], fields: ActivityFieldDefinition[]) {
+function buildTextEmail(team: TeamRow, window: EmailActivityWindow, activities: ActivityRow[], fields: ActivityFieldDefinition[]) {
   const lines = [
     'Daily Activities Summary',
-    `${team.name} - ${formatDisplayDate(summaryDate)}`,
+    `${team.name} - ${window.displaySummaryDate}`,
     `Total activities: ${activities.length}`,
+    `Included period: ${window.startDisplay} to ${window.endDisplay}`,
     '',
   ]
 
   if (activities.length === 0) {
-    lines.push('No activities were added for this team today.')
+    lines.push('No activities were added for this team during this 24-hour period.')
     return lines.join('\n')
   }
 
@@ -617,7 +666,6 @@ Deno.serve(async (request) => {
     const now = new Date()
     const { isoDate: summaryDate } = getCairoDateParts(now)
     const currentCairoMinutes = getCairoClockMinutes(now)
-    const { startUtc, endUtc } = getCairoDayUtcRange(summaryDate)
     const { data: teams, error: teamsError } = await supabase
       .from('app_teams')
       .select(
@@ -636,6 +684,7 @@ Deno.serve(async (request) => {
     for (const team of (teams || []) as TeamWithSettingsRow[]) {
       const teamSettings = getTeamSettings(team)
       const scheduledTime = parseDailyEmailTime(teamSettings?.daily_activity_email_time)
+      const summaryWindow = getTeamActivityWindow(now, scheduledTime)
 
       if (!forceSend && currentCairoMinutes < scheduledTime.minutes) {
         results.push({
@@ -644,6 +693,8 @@ Deno.serve(async (request) => {
           status: 'skipped',
           reason: 'not_due',
           scheduledTime: scheduledTime.value,
+          windowStart: summaryWindow.startUtc,
+          windowEnd: summaryWindow.endUtc,
         })
         continue
       }
@@ -652,7 +703,7 @@ Deno.serve(async (request) => {
         .from('daily_activity_email_logs')
         .select('id')
         .eq('team_id', team.id)
-        .eq('summary_date', summaryDate)
+        .eq('summary_date', summaryWindow.summaryDate)
         .eq('status', 'sent')
         .maybeSingle()
 
@@ -661,7 +712,14 @@ Deno.serve(async (request) => {
       }
 
       if (sentLog) {
-        results.push({ teamId: team.id, teamName: team.name, status: 'skipped', reason: 'already_sent' })
+        results.push({
+          teamId: team.id,
+          teamName: team.name,
+          status: 'skipped',
+          reason: 'already_sent',
+          windowStart: summaryWindow.startUtc,
+          windowEnd: summaryWindow.endUtc,
+        })
         continue
       }
 
@@ -669,8 +727,8 @@ Deno.serve(async (request) => {
         .from('team_activities')
         .select('date,performer,system,shift,permit_number,instrument_type,activityType,tag,problem,action,comments,custom_fields,created_at')
         .eq('team_id', team.id)
-        .gte('created_at', startUtc)
-        .lt('created_at', endUtc)
+        .gte('created_at', summaryWindow.startUtc)
+        .lt('created_at', summaryWindow.endUtc)
         .order('created_at', { ascending: true })
 
       if (activitiesError) {
@@ -681,13 +739,20 @@ Deno.serve(async (request) => {
       if (activityRows.length === 0 && !sendEmptySummaries) {
         await supabase.from('daily_activity_email_logs').insert({
           team_id: team.id,
-          summary_date: summaryDate,
+          summary_date: summaryWindow.summaryDate,
           status: 'skipped',
           recipient_count: 0,
           activity_count: 0,
-          error_message: 'No activities for summary date.',
+          error_message: `No activities between ${summaryWindow.startDisplay} and ${summaryWindow.endDisplay}.`,
         })
-        results.push({ teamId: team.id, teamName: team.name, status: 'skipped', reason: 'no_activities' })
+        results.push({
+          teamId: team.id,
+          teamName: team.name,
+          status: 'skipped',
+          reason: 'no_activities',
+          windowStart: summaryWindow.startUtc,
+          windowEnd: summaryWindow.endUtc,
+        })
         continue
       }
 
@@ -713,13 +778,20 @@ Deno.serve(async (request) => {
       if (recipients.length === 0) {
         await supabase.from('daily_activity_email_logs').insert({
           team_id: team.id,
-          summary_date: summaryDate,
+          summary_date: summaryWindow.summaryDate,
           status: 'skipped',
           recipient_count: 0,
           activity_count: activityRows.length,
           error_message: 'No approved team users with email addresses.',
         })
-        results.push({ teamId: team.id, teamName: team.name, status: 'skipped', reason: 'no_recipients' })
+        results.push({
+          teamId: team.id,
+          teamName: team.name,
+          status: 'skipped',
+          reason: 'no_recipients',
+          windowStart: summaryWindow.startUtc,
+          windowEnd: summaryWindow.endUtc,
+        })
         continue
       }
 
@@ -730,14 +802,14 @@ Deno.serve(async (request) => {
           from: emailFrom,
           replyTo: emailReplyTo,
           recipients,
-          subject: `Daily Activities Summary - ${team.name} - ${formatDisplayDate(summaryDate)}`,
-          html: buildHtmlEmail(team, summaryDate, activityRows, emailFields),
-          text: buildTextEmail(team, summaryDate, activityRows, emailFields),
+          subject: `Daily Activities Summary - ${team.name} - ${summaryWindow.displaySummaryDate}`,
+          html: buildHtmlEmail(team, summaryWindow, activityRows, emailFields),
+          text: buildTextEmail(team, summaryWindow, activityRows, emailFields),
         })
 
         await supabase.from('daily_activity_email_logs').insert({
           team_id: team.id,
-          summary_date: summaryDate,
+          summary_date: summaryWindow.summaryDate,
           status: 'sent',
           recipient_count: recipients.length,
           activity_count: activityRows.length,
@@ -751,11 +823,13 @@ Deno.serve(async (request) => {
           status: 'sent',
           recipientCount: recipients.length,
           activityCount: activityRows.length,
+          windowStart: summaryWindow.startUtc,
+          windowEnd: summaryWindow.endUtc,
         })
       } catch (error) {
         await supabase.from('daily_activity_email_logs').insert({
           team_id: team.id,
-          summary_date: summaryDate,
+          summary_date: summaryWindow.summaryDate,
           status: 'failed',
           recipient_count: recipients.length,
           activity_count: activityRows.length,
@@ -766,6 +840,8 @@ Deno.serve(async (request) => {
           teamName: team.name,
           status: 'failed',
           error: error instanceof Error ? error.message : String(error),
+          windowStart: summaryWindow.startUtc,
+          windowEnd: summaryWindow.endUtc,
         })
       }
     }

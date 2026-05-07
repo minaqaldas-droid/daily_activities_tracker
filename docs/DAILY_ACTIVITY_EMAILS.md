@@ -11,7 +11,7 @@ The Edge Function:
 
 - Reads active teams with daily summaries enabled.
 - Sends each team only after its configured Cairo send time.
-- Finds activities created during the current `Africa/Cairo` day.
+- Finds activities created during the 24 hours before each team's configured send time.
 - Sends the summary to approved users in each team.
 - Logs `sent`, `skipped`, and `failed` results in `daily_activity_email_logs`.
 - Prevents duplicate sent emails for the same team and date.
@@ -31,7 +31,7 @@ This adds:
 - `daily_activity_email_logs`
 
 By default, `daily_activity_email_enabled` is `true` for every team.
-By default, `daily_activity_email_time` is `17:00` Cairo time.
+By default, `daily_activity_email_time` is `17:00` Cairo time. For example, if a team sends at `17:00`, the summary includes activities added from `17:00` yesterday through `17:00` today.
 
 Team Admins and Super Admins can change this per team from:
 
@@ -121,3 +121,4 @@ Check `daily_activity_email_logs` after the test.
 - Recipients are pulled from `team_memberships` joined to approved `users`.
 - The email uses BCC so users do not see the whole recipient list.
 - The summary is based on `team_activities.created_at`, not the editable activity `date` field.
+- Each team's summary window is the 24 hours before that team's selected Cairo send time.
