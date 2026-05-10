@@ -22,4 +22,5 @@ export const SYSTEM_OPTIONS = [
   'Air Dryer C/D',
   'Flare IQ',
   '400CEMS',
+  'PAGA',
 ] as const
