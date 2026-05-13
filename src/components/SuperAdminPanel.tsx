@@ -45,7 +45,8 @@ const CORE_CARD_KEYS = new Set(['totalActivities', 'myActivities', 'thisWeekActi
 const DEFAULT_CARD_ICON = '*'
 const CHART_ITEM_LIMIT_OPTIONS = [4, 6, 8, 10, 20, 30, 50, 100]
 const DEFAULT_DAILY_ACTIVITY_EMAIL_TIME = '17:00'
-const DAILY_ACTIVITY_EMAIL_TIME_STEP_SECONDS = 15 * 60
+const DAILY_ACTIVITY_EMAIL_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'))
+const DAILY_ACTIVITY_EMAIL_MINUTE_OPTIONS = ['00', '15', '30', '45']
 
 function isValidImageFile(file: File) {
   return ACCEPTED_IMAGE_TYPES.includes(file.type) && file.size <= MAX_FILE_SIZE
@@ -62,6 +63,12 @@ function normalizeDailyEmailTime(value: string | undefined) {
   const normalizedMinute = snappedMinute === 60 ? 0 : snappedMinute
 
   return `${String(normalizedHour).padStart(2, '0')}:${String(normalizedMinute).padStart(2, '0')}`
+}
+
+function getDailyEmailTimeParts(value: string) {
+  const normalized = normalizeDailyEmailTime(value)
+  const [hour, minute] = normalized.split(':')
+  return { hour, minute }
 }
 
 function normalizeSequentialFieldOrder(settings: Settings, fieldDefinitions: StoredActivityFieldDefinition[], fieldConfig: ActivityFieldConfig) {
@@ -2041,6 +2048,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const orderedFields = getOrderedActivityFields(effectiveSettings)
   const orderedCharts = getOrderedDashboardCharts(effectiveSettings)
   const orderedCards = getOrderedDashboardCards(effectiveSettings)
+  const dailyEmailTimeParts = getDailyEmailTimeParts(dailyActivityEmailTime)
 
   const handleLogoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -2368,14 +2376,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </label>
                 <div className="form-group admin-email-time-control">
                   <label htmlFor="daily-activity-email-time">Send Time</label>
-                  <input
-                    id="daily-activity-email-time"
-                    type="time"
-                    step={DAILY_ACTIVITY_EMAIL_TIME_STEP_SECONDS}
-                    value={dailyActivityEmailTime}
-                    onChange={(event) => setDailyActivityEmailTime(normalizeDailyEmailTime(event.target.value))}
-                    disabled={isSubmitting || isLoading || !dailyActivityEmailEnabled}
-                  />
+                  <div className="admin-email-time-selects" id="daily-activity-email-time">
+                    <select
+                      value={dailyEmailTimeParts.hour}
+                      onChange={(event) => setDailyActivityEmailTime(`${event.target.value}:${dailyEmailTimeParts.minute}`)}
+                      disabled={isSubmitting || isLoading || !dailyActivityEmailEnabled}
+                      aria-label="Daily email send hour"
+                    >
+                      {DAILY_ACTIVITY_EMAIL_HOUR_OPTIONS.map((hour) => (
+                        <option key={hour} value={hour}>
+                          {hour}
+                        </option>
+                      ))}
+                    </select>
+                    <span aria-hidden="true">:</span>
+                    <select
+                      value={dailyEmailTimeParts.minute}
+                      onChange={(event) => setDailyActivityEmailTime(`${dailyEmailTimeParts.hour}:${event.target.value}`)}
+                      disabled={isSubmitting || isLoading || !dailyActivityEmailEnabled}
+                      aria-label="Daily email send minute"
+                    >
+                      {DAILY_ACTIVITY_EMAIL_MINUTE_OPTIONS.map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <small>Cairo time, 24-hour format, in 15-minute steps.</small>
                 </div>
               </div>

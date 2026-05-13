@@ -3574,8 +3574,23 @@ body.modal-open {
   min-width: 0;
 }
 
-.admin-email-time-control input[type="time"] {
+.admin-email-time-selects {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-email-time-selects span {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.admin-email-time-selects select {
   min-height: 48px;
+  width: 100%;
+  min-width: 0;
+  text-align: center;
 }
 
 .admin-entity-actions {
