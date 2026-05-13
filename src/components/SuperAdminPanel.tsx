@@ -45,13 +45,23 @@ const CORE_CARD_KEYS = new Set(['totalActivities', 'myActivities', 'thisWeekActi
 const DEFAULT_CARD_ICON = '*'
 const CHART_ITEM_LIMIT_OPTIONS = [4, 6, 8, 10, 20, 30, 50, 100]
 const DEFAULT_DAILY_ACTIVITY_EMAIL_TIME = '17:00'
+const DAILY_ACTIVITY_EMAIL_TIME_STEP_SECONDS = 15 * 60
 
 function isValidImageFile(file: File) {
   return ACCEPTED_IMAGE_TYPES.includes(file.type) && file.size <= MAX_FILE_SIZE
 }
 
 function normalizeDailyEmailTime(value: string | undefined) {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value || '') ? value || DEFAULT_DAILY_ACTIVITY_EMAIL_TIME : DEFAULT_DAILY_ACTIVITY_EMAIL_TIME
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value || '')) {
+    return DEFAULT_DAILY_ACTIVITY_EMAIL_TIME
+  }
+
+  const [hour, minute] = String(value).split(':').map(Number)
+  const snappedMinute = Math.round(minute / 15) * 15
+  const normalizedHour = snappedMinute === 60 ? (hour + 1) % 24 : hour
+  const normalizedMinute = snappedMinute === 60 ? 0 : snappedMinute
+
+  return `${String(normalizedHour).padStart(2, '0')}:${String(normalizedMinute).padStart(2, '0')}`
 }
 
 function normalizeSequentialFieldOrder(settings: Settings, fieldDefinitions: StoredActivityFieldDefinition[], fieldConfig: ActivityFieldConfig) {
@@ -2361,11 +2371,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <input
                     id="daily-activity-email-time"
                     type="time"
+                    step={DAILY_ACTIVITY_EMAIL_TIME_STEP_SECONDS}
                     value={dailyActivityEmailTime}
                     onChange={(event) => setDailyActivityEmailTime(normalizeDailyEmailTime(event.target.value))}
                     disabled={isSubmitting || isLoading || !dailyActivityEmailEnabled}
                   />
-                  <small>Cairo time, 24-hour format.</small>
+                  <small>Cairo time, 24-hour format, in 15-minute steps.</small>
                 </div>
               </div>
               <p className="form-hint">

@@ -82,11 +82,7 @@ Recommended cron, every 15 minutes:
 */15 * * * *
 ```
 
-If you need more exact timing, run it every 5 minutes:
-
-```cron
-*/5 * * * *
-```
+The Admin Settings time picker also uses 15-minute intervals, so this cron schedule matches the available send-time options.
 
 Configure the scheduled request as `POST` and include this header:
 
