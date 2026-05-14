@@ -183,7 +183,6 @@ function PieChartCard({
         </h3>
         {canControlDisplayCount && onUpdateDisplayCount ? (
           <label className="dashboard-chart-count-control">
-            <span>Top</span>
             <select value={maxItems} onChange={(event) => onUpdateDisplayCount(chartKey, Number(event.target.value))}>
               {DASHBOARD_CHART_ITEM_LIMIT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
@@ -262,7 +261,6 @@ function BarChartCard({
         </h3>
         {canControlDisplayCount && onUpdateDisplayCount ? (
           <label className="dashboard-chart-count-control">
-            <span>Top</span>
             <select value={maxItems} onChange={(event) => onUpdateDisplayCount(chartKey, Number(event.target.value))}>
               {DASHBOARD_CHART_ITEM_LIMIT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
