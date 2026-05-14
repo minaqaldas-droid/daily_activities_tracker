@@ -1071,7 +1071,7 @@ function App() {
                   onEditDenied={() => setMessage({ type: 'error', text: EDIT_RESTRICTED_MESSAGE })}
                   onDeleteDenied={() => setMessage({ type: 'error', text: DELETE_RESTRICTED_MESSAGE })}
                   onOpenActivityResults={handleOpenDashboardResults}
-                  canManageChartDisplayCounts={isAdmin}
+                  canControlChartDisplayCounts={canViewDashboard}
                   onUpdateChartDisplayCount={handleDashboardChartDisplayCountChange}
                 />
               </div>

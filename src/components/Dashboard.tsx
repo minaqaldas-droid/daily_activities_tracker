@@ -31,7 +31,7 @@ interface DashboardProps {
   onEditDenied?: () => void
   onDeleteDenied?: () => void
   onOpenActivityResults?: (request: DashboardActivityRequest) => void
-  canManageChartDisplayCounts?: boolean
+  canControlChartDisplayCounts?: boolean
   onUpdateChartDisplayCount?: (chartKey: string, maxItems: number) => void
 }
 
@@ -137,7 +137,7 @@ function PieChartCard({
   onValueSelect,
   chartKey,
   maxItems,
-  canManageDisplayCount = false,
+  canControlDisplayCount = false,
   onUpdateDisplayCount,
   className = '',
 }: {
@@ -148,7 +148,7 @@ function PieChartCard({
   onValueSelect?: (item: ChartDatum) => void
   chartKey: string
   maxItems: number
-  canManageDisplayCount?: boolean
+  canControlDisplayCount?: boolean
   onUpdateDisplayCount?: (chartKey: string, maxItems: number) => void
   className?: string
 }) {
@@ -181,8 +181,9 @@ function PieChartCard({
           </span>
           <span>{title}</span>
         </h3>
-        {canManageDisplayCount && onUpdateDisplayCount ? (
+        {canControlDisplayCount && onUpdateDisplayCount ? (
           <label className="dashboard-chart-count-control">
+            <span>Top</span>
             <select value={maxItems} onChange={(event) => onUpdateDisplayCount(chartKey, Number(event.target.value))}>
               {DASHBOARD_CHART_ITEM_LIMIT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
@@ -233,7 +234,7 @@ function BarChartCard({
   onValueSelect,
   chartKey,
   maxItems,
-  canManageDisplayCount = false,
+  canControlDisplayCount = false,
   onUpdateDisplayCount,
   className = '',
 }: {
@@ -243,7 +244,7 @@ function BarChartCard({
   onValueSelect?: (item: ChartDatum) => void
   chartKey: string
   maxItems: number
-  canManageDisplayCount?: boolean
+  canControlDisplayCount?: boolean
   onUpdateDisplayCount?: (chartKey: string, maxItems: number) => void
   className?: string
 }) {
@@ -259,8 +260,9 @@ function BarChartCard({
           </span>
           <span>{title}</span>
         </h3>
-        {canManageDisplayCount && onUpdateDisplayCount ? (
+        {canControlDisplayCount && onUpdateDisplayCount ? (
           <label className="dashboard-chart-count-control">
+            <span>Top</span>
             <select value={maxItems} onChange={(event) => onUpdateDisplayCount(chartKey, Number(event.target.value))}>
               {DASHBOARD_CHART_ITEM_LIMIT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
@@ -350,7 +352,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onEditDenied,
   onDeleteDenied,
   onOpenActivityResults,
-  canManageChartDisplayCounts = false,
+  canControlChartDisplayCounts = false,
   onUpdateChartDisplayCount,
 }) => {
   const thisWeekSinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -512,7 +514,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           title={chart.label}
           data={data}
           maxItems={chart.maxItems || DEFAULT_CHART_ITEM_LIMIT}
-          canManageDisplayCount={canManageChartDisplayCounts}
+          canControlDisplayCount={canControlChartDisplayCounts}
           onUpdateDisplayCount={onUpdateChartDisplayCount}
           onValueSelect={onValueSelect}
         />
@@ -529,7 +531,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         data={data}
         total={total}
         maxItems={chart.maxItems || DEFAULT_CHART_ITEM_LIMIT}
-        canManageDisplayCount={canManageChartDisplayCounts}
+        canControlDisplayCount={canControlChartDisplayCounts}
         onUpdateDisplayCount={onUpdateChartDisplayCount}
         onValueSelect={onValueSelect}
       />
